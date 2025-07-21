@@ -1,34 +1,23 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>เข้าสู่ระบบ</title>
-    <link rel="stylesheet" href="/css/style.css">
-</head>
-<body>
-    <div class="container">
-        <div class="login-card">
-            <h1>ยินดีต้อนรับ</h1>
-            <p>กรุณาใส่ชื่อของคุณเพื่อเข้าสู่ระบบ</p>
-            
-            <% if (typeof error !== 'undefined') { %>
-                <div class="error-message">
-                    <%= error %>
-                </div>
-            <% } %>
-            
-            <form action="/login" method="POST" class="login-form">
-                <div class="input-group">
-                    <label for="name">ชื่อ:</label>
-                    <input type="text" id="name" name="name" required placeholder="ใส่ชื่อของคุณ">
-                </div>
-                
-                <button type="submit" class="login-btn">เข้าสู่ระบบ</button>
-            </form>
-        </div>
-    </div>
-    
-    <script src="/js/login.js"></script>
-</body>
-</html>
+<div class="container">
+  <div class="login-card">
+    <h1>ยินดีต้อนรับ</h1>
+    <p>กรุณาใส่ชื่อของคุณเพื่อเข้าสู่ระบบ</p>
+
+    <% if (typeof error !=='undefined' ) { %>
+      <div class="error-message">
+        <%= error %>
+      </div>
+    <% } %>
+
+    <form action="/login" method="POST" class="login-form">
+      <div class="input-group">
+        <label for="name">ชื่อ:</label>
+        <input type="text" id="name" name="name" required placeholder="ใส่ชื่อของคุณ">
+      </div>
+      <button type="submit" class="login-btn">เข้าสู่ระบบ</button>
+    </form>
+
+  </div>
+</div>
+
+<script src="/js/login.js"></script>
