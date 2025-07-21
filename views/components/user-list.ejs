@@ -1,0 +1,34 @@
+<section class="users-section">
+    <h2>รายชื่อผู้ใช้ในระบบ</h2>
+    
+    <div class="users-container">
+        <% if (users && users.length > 0) { %>
+            <div class="users-grid">
+                <% users.forEach(function(user, index) { %>
+                    <div class="user-card" data-index="<%= index %>">
+                        <div class="user-avatar">
+                            <%= user.name.charAt(0).toUpperCase() %>
+                        </div>
+                        <div class="user-info">
+                            <h3><%= user.name %></h3>
+                            <p class="join-date">
+                                เข้าร่วมเมื่อ: <%= new Date(user.created_at).toLocaleDateString('th-TH') %>
+                            </p>
+                        </div>
+                        <div class="user-actions">
+                            <button class="view-btn" onclick="viewUser('<%= user.name %>')">ดู</button>
+                        </div>
+                    </div>
+                <% }) %>
+            </div>
+        <% } else { %>
+            <div class="no-users">
+                <p>ยังไม่มีผู้ใช้ในระบบ</p>
+            </div>
+        <% } %>
+    </div>
+    
+    <div class="users-pagination">
+        <span>แสดง <%= users.length %> ผู้ใช้</span>
+    </div>
+</section>
