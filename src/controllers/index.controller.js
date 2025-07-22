@@ -13,6 +13,8 @@ exports.dashboard = (req, res) => {
     return res.redirect('/');
   }
 
+  
+
   // Get all users for display
   usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
     if (err) {
@@ -26,3 +28,8 @@ exports.dashboard = (req, res) => {
     });
   });
 } 
+
+
+exports.about = (req, res) => {
+  res.render('about')
+}

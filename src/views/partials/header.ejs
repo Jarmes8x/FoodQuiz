@@ -7,16 +7,20 @@
         <nav class="main-nav">
             <ul class="nav-list">
                 <li><a href="/dashboard" class="nav-link">หน้าหลัก</a></li>
-                <li><a href="#" class="nav-link">เกี่ยวกับ</a></li>
+                <li><a href="/about" class="nav-link">เกี่ยวกับ</a></li>
                 <li><a href="#" class="nav-link">ติดต่อ</a></li>
             </ul>
         </nav>
         
         <div class="user-section">
-            <span class="user-name">👤 <%= user.name %></span>
-            <form action="/logout" method="POST" style="display: inline;">
+            <% if (user) { %>
+                <span class="user-name">👤 <%= user.name %></span>
+                <form action="/logout" method="POST" style="display: inline;">
                 <button type="submit" class="logout-btn">ออกจากระบบ</button>
-            </form>
+                </form>
+            <% } %>
         </div>
+
+
     </div>
 </header>

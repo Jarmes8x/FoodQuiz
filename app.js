@@ -25,6 +25,11 @@ app.use(session({
 app.use(expressLayouts);
 app.set("layout", "layouts/main");
 
+app.use((req, res, next) => {
+  res.locals.user = req.session.user || null;
+  next();
+});
+
 // Routes
 app.use("/", require("./src/routes/index.routes"));
 app.use("/", require("./src/routes/auth.routes"));
