@@ -1,35 +1,59 @@
 const usersDB = require("../database/dbConfig");
 
 exports.home = (req, res) => {
-  if (req.session.user) {
-    res.redirect('/dashboard');
-  } else {
-    res.render('login');
+  const locals = {
+    title: "Kila",
+    description: "Kila",
+    header: "Page header",
+    layout: 'layouts/main'
   }
+
+  res.render("home", locals);
 }
 
 exports.dashboard = (req, res) => {
+  const locals = {
+    title: "Kila",
+    description: "Kila",
+    header: "Page header",
+    layout: 'layouts/main'
+  }
+
   if (!req.session.user) {
     return res.redirect('/');
   }
 
-  
-
-  // Get all users for display
   usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
     if (err) {
       console.error(err);
       users = [];
     }
 
-    res.render('dashboard', {
-      user: req.session.user,
-      users: users
-    });
-  });
-} 
+    locals.user = req.session.user;
+    locals.users = users;
 
+    res.render('dashboard', locals);
+  });
+}
 
 exports.about = (req, res) => {
-  res.render('about')
+  const locals = {
+    title: "Kila",
+    description: "Kila",
+    header: "Page header",
+    layout: 'layouts/main'
+  }
+
+  res.render('about', locals);
+}
+
+exports.quiz = (req, res) => {
+  const locals = {
+    title: "Kila",
+    description: "Kila",
+    header: "Page header",
+    layout: 'layouts/main'
+  }
+
+  res.render('quiz', locals);
 }

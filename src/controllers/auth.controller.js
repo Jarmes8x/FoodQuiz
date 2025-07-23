@@ -1,6 +1,18 @@
 const usersDB = require("../database/dbConfig");
 
 exports.login = (req, res) => {
+  const locals = {
+    title: "Kila",
+    description: "Kila",
+    header: "Page header",
+    layout: 'layouts/auth'
+  }
+
+  res.render('login', locals);
+};
+
+
+exports.loginPost = (req, res) => {
   const { name } = req.body;
 
   if (!name || name.trim() === '') {
@@ -19,7 +31,7 @@ exports.login = (req, res) => {
       name: name.trim()
     };
 
-    res.redirect('/dashboard');
+    res.redirect('/');
   });
 }
 
