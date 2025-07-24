@@ -47,13 +47,17 @@ exports.about = (req, res) => {
   res.render('about', locals);
 }
 
+
 exports.quiz = (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login');
+  }
   const locals = {
     title: "Kila",
     description: "Kila",
     header: "Page header",
-    layout: 'layouts/main'
+    layout: 'layouts/main',
+    user: req.session.user
   }
-
   res.render('quiz', locals);
 }

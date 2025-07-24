@@ -150,19 +150,43 @@ body {
     color: #555;
 }
 
-.logout-btn {
-    padding: 8px 16px;
-    background: #ff4757;
-    color: white;
+
+/* ปุ่ม logout, login, btn-3d แสดงเฉพาะบน desktop */
+.logout-btn, .login-btn, .btn-3d {
+@media (max-width: 768px) {
+    /* ซ่อนปุ่ม logout, login, btn-3d ใน header บนมือถือ */
+    .logout-btn, .login-btn, .btn-3d {
+        display: none !important;
+    }
+}
+    padding: 12px 28px;
+    background: linear-gradient(90deg, #ff6a6a 0%, #ff8c42 100%);
+    color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 16px;
     cursor: pointer;
-    font-size: 14px;
-    transition: background 0.3s ease;
+    font-size: 1.1rem;
+    font-weight: 700;
+    box-shadow: 0 4px 16px rgba(255, 106, 106, 0.12);
+    transition: background 0.3s, box-shadow 0.3s, transform 0.2s;
+    margin-bottom: 0.5rem;
 }
 
-.logout-btn:hover {
-    background: #ff3838;
+.logout-btn:hover, .login-btn:hover, .btn-3d:hover {
+    background: linear-gradient(90deg, #ff3838 0%, #ffb347 100%);
+    box-shadow: 0 8px 24px rgba(255, 106, 106, 0.18);
+    transform: translateY(-2px) scale(1.03);
+}
+
+@media (max-width: 768px) {
+    .logout-btn, .login-btn, .btn-3d {
+        width: 100%;
+        max-width: 340px;
+        font-size: 1rem;
+        padding: 14px 0;
+        border-radius: 14px;
+        margin-bottom: 0.7rem;
+    }
 }
 
 /* Dashboard Styles */
