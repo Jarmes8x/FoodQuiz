@@ -25,6 +25,25 @@ usersDB.serialize(() => {
       console.error("Error creating users table:", err.message);
     }
   });
+
+  // Table: rooms
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS rooms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      creator_id INTEGER NOT NULL,
+      max_players INTEGER DEFAULT 10,
+      is_private BOOLEAN DEFAULT 0,
+      password TEXT DEFAULT NULL,
+      room_color TEXT DEFAULT '#FFFFFF',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (creator_id) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating rooms table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close

@@ -1,52 +1,43 @@
 <!-- Navbar -->
-<header class="w-full z-50 bg-amber-50 shadow-md">
+<header class="fixed top-0 left-0 w-full z-50 bg-amber-50 shadow-md">
   <div class="container mx-auto px-4 py-8 max-h-20 flex items-center justify-between">
-    <!-- Logo -->
-    <a href="/" class="text-black text-2xl font-black bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text">
+    <a href="/" class="text-4xl font-black bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">
       FoodQuiz
     </a>
 
-    <nav class="hidden md:flex space-x-8 text-gray-700 font-semibold">
-      <a href="/" class="hover:text-red-500 transition-colors text-xl">หน้าแรก</a>
-      <a href="/about" class="hover:text-red-500 transition-colors text-xl">เกี่ยวกับ</a>
-      <a href="/quiz" class="hover:text-red-500 transition-colors text-xl">ห้องคำถาม</a>
-    </nav>
-
+    <ul class="hidden md:flex gap-6 text-gray-700 font-semibold">
+      <li><a href="/" class="hover:text-orange-500 transition-colors text-xl">หน้าแรก</a></li>
+      <li><a href="/about" class="hover:text-orange-500 transition-colors text-xl">เกี่ยวกับ</a></li>
+      <li><a href="/quiz" class="hover:text-orange-500 transition-colors text-xl">ห้องคำถาม</a></li>
+    </ul>
 
     <div>
       <% if (typeof user !== 'undefined' && user) { %>
-        <span class="font-bold text-gray-700 mr-4">👤 <%= user.name %></span>
-        <form action="/logout" method="POST" class="inline">
-          <button type="submit" class="bg-red-500 text-white hover:bg-red-600 cursor-pointer font-bold px-8 py-3 rounded-2xl btn-3d inline-block text-lg">ออกจากระบบ</button>
-        </form>
+        <div class="relative inline-block text-left" id="user-menu-container">
+          <button id="user-menu-btn" type="button" class="cursor-pointer font-bold text-gray-700 mr-4 flex items-center gap-2 focus:outline-none">
+            <span><%= user.name %></span>
+            <i class="fa-solid fa-user"></i>
+            <i id="icon-menu-dropdown" class="fa-solid fa-caret-down transition-transform duration-200"></i>
+          </button>
+          <div id="user-dropdown" class="hidden absolute overflow-hidden right-0 mt-2 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <a href="/quiz" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">ห้องคำถาม</a>
+            <a href="/profile" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">โปรไฟล์</a>
+            <a href="/about" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">เกี่ยวกับ</a>
+            <form action="/logout" method="POST">
+              <button type="submit" class="w-full text-left px-4 py-2 text-gray-700 hover:bg-gray-100">ออกจากระบบ</button>
+            </form>
+          </div>
+        </div>
       <% } else { %>
         <a href="/login"
-          class="bg-white text-red-500 hover:bg-red-50 cursor-pointer font-bold px-10 py-4 rounded-2xl btn-3d inline-block text-lg">
+          class="bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] hover:scale-105 text-white cursor-pointer font-bold px-8 py-3 rounded-2xl inline-block text-lg transition-all duration-300 ease-out">
           เข้าสู่ระบบ
         </a>
       <% } %>
     </div>
-
-    <!-- Mobile Menu Button -->
-    <button id="menu-btn" class="md:hidden text-gray-700 text-2xl focus:outline-none">
-      <i class="fa-solid fa-bars"></i>
-    </button>
-  </div>
-
-  <!-- Mobile Nav -->
-  <div id="mobile-menu" class="md:hidden hidden bg-white border-t border-gray-200 px-6 pb-4">
-    <a href="/" class="block py-2 font-medium text-gray-700 hover:text-red-500">หน้าแรก</a>
-    <a href="/about" class="block py-2 font-medium text-gray-700 hover:text-red-500">เกี่ยวกับ</a>
-    <a href="/quiz" class="block py-2 font-medium text-gray-700 hover:text-red-500">ห้องคำถาม</a>
-    <% if (typeof user !== 'undefined' && user) { %>
-      <form action="/logout" method="POST" class="block mt-3">
-        <button type="submit" class="w-full bg-red-500 text-white text-center py-2 rounded-lg font-bold hover:bg-red-600">ออกจากระบบ</button>
-      </form>
-    <% } else { %>
-      <a href="/login" class="block mt-3 bg-red-500 text-white text-center py-2 rounded-lg font-bold hover:bg-red-600">เข้าสู่ระบบ</a>
-    <% } %>
   </div>
 </header>
+
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     const menuBtn = document.getElementById('menu-btn');
@@ -54,6 +45,30 @@
     if(menuBtn && mobileMenu) {
       menuBtn.addEventListener('click', function() {
         mobileMenu.classList.toggle('hidden');
+      });
+    }
+    // User dropdown
+    const userMenuBtn = document.getElementById('user-menu-btn');
+    const userDropdown = document.getElementById('user-dropdown');
+    const iconMenuDropdown = document.getElementById('icon-menu-dropdown');
+    if(userMenuBtn && userDropdown && iconMenuDropdown) {
+      userMenuBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        const isOpen = userDropdown.classList.toggle('hidden') === false;
+        if (isOpen) {
+          iconMenuDropdown.style.transform = 'rotate(180deg)';
+        } else {
+          iconMenuDropdown.style.transform = 'rotate(0deg)';
+        }
+      });
+      document.addEventListener('click', function(e) {
+        if (!userDropdown.classList.contains('hidden')) {
+          userDropdown.classList.add('hidden');
+          iconMenuDropdown.style.transform = 'rotate(0deg)';
+        }
+      });
+      userDropdown.addEventListener('click', function(e) {
+        e.stopPropagation();
       });
     }
   });

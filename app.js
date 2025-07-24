@@ -1,8 +1,9 @@
 const express = require('express');
 const path = require('path');
 const expressLayouts = require("express-ejs-layouts");
-const session = require('express-session');
 const bodyParser = require('body-parser');
+const authenticateJWT = require('./src/middleware/jwtAuth');
+const cookieParser = require('cookie-parser');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,20 +14,16 @@ app.set('views', path.join(__dirname, 'src/views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
+app.use(cookieParser());
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'secret-key',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false }
-}));
+app.use(authenticateJWT);
 
 // Layout
 app.use(expressLayouts);
 app.set("layout", "layouts/main");
 
 app.use((req, res, next) => {
-  res.locals.user = req.session.user || null;
+  res.locals.user = req.user || null;
   next();
 });
 

@@ -1,12 +1,14 @@
-
-<div class="container py-8">
-    <div class="dashboard-content text-center">
-        <h1 class="text-3xl font-bold mb-4 text-indigo-700">ยินดีต้อนรับสู่ The tale taster</h1>
-        <p class="mb-6 text-gray-700">เกมตอบคำถาม 4 รสชาติในวรรณกรรมไทย<br>เริ่มต้นความสนุกได้เลย!</p>
-        <% if (typeof user !== 'undefined' && user) { %>
-          <a href="/dashboard" class="action-btn primary">เริ่มเล่นเกม</a>
-        <% } else { %>
-          <a href="/login" class="action-btn primary">เข้าสู่ระบบเพื่อเริ่มเล่นเกม</a>
-        <% } %>
-    </div>
+<div class="flex items-center justify-center mt-6">
+  <div class="bg-white rounded-3xl shadow-2xl p-10 max-w-lg w-full text-center border border-indigo-100">
+    <img src="/img/1.png" alt="Quiz Logo" class="mx-auto w-24 h-24 mb-6 drop-shadow-lg rounded-full border-4 border-indigo-200 bg-white" />
+    <h1 class="text-4xl font-extrabold mb-4 text-indigo-700 drop-shadow-sm">ยินดีต้อนรับสู่ <span class="text-pink-500">The tale taster</span></h1>
+    <p class="mb-8 text-lg text-gray-700 leading-relaxed">เกมตอบคำถาม <span class="font-semibold text-indigo-500">4 รสชาติ</span> ในวรรณกรรมไทย<br>เริ่มต้นความสนุกได้เลย!</p>
+    <% if (typeof user !=='undefined' && user) { %>
+      <a href="/quiz" class="action-btn primary transition-all duration-200 bg-indigo-500 hover:bg-pink-500 text-white font-bold py-3 px-8 rounded-full shadow-lg text-lg">เริ่มเล่นเกม</a>
+    <% } else { %>
+      <a href="/login" class="action-btn primary transition-all duration-200 bg-indigo-400 hover:bg-pink-400 text-white font-bold py-3 px-8 rounded-full shadow-lg text-lg">เข้าสู่ระบบเพื่อเริ่มเล่นเกม</a>
+    <% } %>
+  </div>
 </div>
+
+<%- include("./partials/footer") %>

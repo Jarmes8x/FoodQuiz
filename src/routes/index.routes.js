@@ -5,5 +5,7 @@ router.get('/', indexController.home);
 router.get('/dashboard', indexController.dashboard);
 router.get('/quiz', indexController.quiz);
 router.get('/about', indexController.about);
+router.get('/create-room', indexController.createRoomPage);
+router.post('/create-room', indexController.createRoomPost);
 
 module.exports = router;
