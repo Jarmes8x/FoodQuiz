@@ -44,6 +44,45 @@ usersDB.serialize(() => {
       console.error("Error creating rooms table:", err.message);
     }
   });
+
+  // Table: questions
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      question_text TEXT NOT NULL,
+      choice1 TEXT NOT NULL,
+      choice2 TEXT NOT NULL,
+      choice3 TEXT NOT NULL,
+      choice4 TEXT NOT NULL,
+      answer_index INTEGER NOT NULL, -- 0-3
+      hint TEXT,
+      FOREIGN KEY (room_id) REFERENCES rooms(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating questions table:", err.message);
+    }
+  });
+
+  // Table: room_players
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS room_players (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      score INTEGER DEFAULT 0,
+      is_owner BOOLEAN DEFAULT 0,
+      answered BOOLEAN DEFAULT 0,
+      answer_time DATETIME,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating room_players table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close

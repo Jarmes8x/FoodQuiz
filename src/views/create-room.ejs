@@ -10,7 +10,6 @@
     </div>
     <div class="relative z-10 flex flex-col items-center justify-center gap-6 py-12 px-6 md:px-16">
       <h2 class="text-4xl md:text-5xl font-extrabold mb-2 text-purple-800 drop-shadow-lg flex items-center gap-2">
-        <i class="fa-solid fa-plus bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white rounded-full p-2"></i>
         สร้างห้องของคุณ
       </h2>
       <p class="text-lg text-gray-700 mb-4 font-medium">ตั้งค่าห้องของคุณและเชิญเพื่อนมาเล่นด้วยกัน!</p>
@@ -28,25 +27,70 @@
           <div class="mb-2">ประเภท: <span class="font-semibold"><%= room.is_private ? 'ส่วนตัว' : 'สาธารณะ' %></span></div>
           <div class="mb-2 flex items-center gap-2">สีห้อง: <span style="display:inline-block;width:24px;height:24px;background:<%= room.room_color %>;border-radius:5px;vertical-align:middle;"></span></div>
         </div>
-        <!-- TODO: Add delete room button here -->
       <% } else { %>
         <form action="/create-room" method="POST" class="w-full max-w-md flex flex-col gap-5 bg-white/80 rounded-xl p-8 shadow-lg mt-2">
           <label class="font-medium text-gray-700">ชื่อห้อง
-            <input type="text" name="name" class="mt-1 p-3 border border-purple-200 rounded-lg w-full focus:ring-2 focus:ring-purple-400" required>
+            <input type="text" name="name" value="ห้องของ <%= user.name %>" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" required>
           </label>
           <label class="font-medium text-gray-700">จำนวนผู้เล่นสูงสุด
-            <input type="number" name="max_players" class="mt-1 p-3 border border-purple-200 rounded-lg w-full focus:ring-2 focus:ring-purple-400" min="2" max="20" value="10">
+            <input type="number" name="max_players" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" min="2" max="20" value="10">
           </label>
           <label class="font-medium flex items-center gap-2 text-gray-700">
-            <input type="checkbox" name="is_private" value="1" class="accent-purple-500"> ห้องส่วนตัว (Private)
+            <input type="checkbox" name="is_private" value="1" id="is_private_checkbox" class="accent-purple-500"> ห้องส่วนตัว (ไม่บังคับ)
           </label>
-          <label class="font-medium text-gray-700">รหัสผ่าน (ถ้าต้องการ)
-            <input type="text" name="password" class="mt-1 p-3 border border-purple-200 rounded-lg w-full focus:ring-2 focus:ring-purple-400">
+          <label class="font-medium text-gray-700" id="password_label" style="display:none;">รหัสผ่าน (ไม่บังคับ)
+            <input type="text" name="password" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full">
           </label>
-          <label class="font-medium text-gray-700">สีห้อง
-            <input type="color" name="room_color" class="mt-1 p-1 border border-purple-200 rounded-lg w-16 h-10">
-          </label>
-          <button type="submit" class="bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] text-white font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2">
+          <div class="font-medium text-gray-700">
+            <label>สีห้อง</label>
+            <div class="mt-2 grid grid-cols-5 gap-2">
+              <input type="radio" name="room_color" value="#ffadad" id="color1" class="hidden">
+              <label for="color1" class="w-10 h-10 bg-[#ffadad] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#a0e7e5" id="color2" class="hidden">
+              <label for="color2" class="w-10 h-10 bg-[#a0e7e5] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#b5ead7" id="color3" class="hidden">
+              <label for="color3" class="w-10 h-10 bg-[#b5ead7] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#fdfd96" id="color4" class="hidden">
+              <label for="color4" class="w-10 h-10 bg-[#fdfd96] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#ffd6a5" id="color5" class="hidden">
+              <label for="color5" class="w-10 h-10 bg-[#ffd6a5] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#cdb4db" id="color6" class="hidden">
+              <label for="color6" class="w-10 h-10 bg-[#cdb4db] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#ffb7c5" id="color7" class="hidden">
+              <label for="color7" class="w-10 h-10 bg-[#ffb7c5] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#ffdac1" id="color9" class="hidden">
+              <label for="color9" class="w-10 h-10 bg-[#ffdac1] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+
+              <input type="radio" name="room_color" value="#d0f4de" id="color8" class="hidden">
+              <label for="color8" class="w-10 h-10 bg-[#d0f4de] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+            </div>
+          </div>
+          <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2">
             <i class="fa-solid fa-plus"></i> สร้างห้อง
           </button>
         </form>
@@ -54,3 +98,41 @@
     </div>
   </div>
 </div> 
+
+<script>
+  // จัดการการเลือกสี
+  const colorInputs = document.querySelectorAll('input[name="room_color"]');
+  const checkIcons = document.querySelectorAll('.check-icon');
+
+  colorInputs.forEach((input, index) => {
+    input.addEventListener('change', function () {
+      // ซ่อนเช็คทั้งหมด
+      checkIcons.forEach(icon => {
+        icon.style.opacity = '0';
+        icon.parentElement.classList.remove('border-gray-600');
+      });
+
+      // แสดงเช็คที่เลือก
+      if (this.checked) {
+        checkIcons[index].style.opacity = '1';
+        checkIcons[index].parentElement.classList.add('border-gray-600');
+      }
+    });
+  });
+
+  // ตั้งค่าเริ่มต้น (เลือกสีแรก)
+  colorInputs[0].checked = true;
+  checkIcons[0].style.opacity = '1';
+  checkIcons[0].parentElement.classList.add('border-gray-600');
+
+  // แสดง/ซ่อนช่องรหัสผ่านตาม checkbox ห้องส่วนตัว
+  const isPrivateCheckbox = document.getElementById('is_private_checkbox');
+  const passwordLabel = document.getElementById('password_label');
+  isPrivateCheckbox.addEventListener('change', function() {
+    if (this.checked) {
+      passwordLabel.style.display = '';
+    } else {
+      passwordLabel.style.display = 'none';
+    }
+  });
+</script>

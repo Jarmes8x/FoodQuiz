@@ -1,0 +1,129 @@
+<div class="container mx-auto px-4 py-8">
+  <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
+  <div class="flex flex-col md:flex-row gap-6 mb-6">
+    <div class="flex-1 bg-white rounded-2xl shadow p-6">
+      <h3 class="text-lg font-semibold mb-2">ผู้เล่นในห้อง (<span id="player-count"><%= players.length %></span>/<%= room.max_players %>)</h3>
+      <ul id="player-list">
+        <% players.forEach(function(player) { %>
+          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>">👤 <%= player.name %> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
+        <% }); %>
+      </ul>
+    </div>
+    <div class="flex-1 bg-white rounded-2xl shadow p-6">
+      <div id="game-area">
+        <!-- ส่วนแสดงคำถามและตัวเลือกจะถูกเติมโดย JS -->
+        <div id="waiting-area" class="text-center text-lg text-gray-500">
+          <span id="waiting-message">รอเจ้าของห้องเริ่มเกม...</span>
+        </div>
+      </div>
+      <% if (user.id === room.creator_id) { %>
+        <button id="start-btn" class="mt-4 bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">เริ่มเกม</button>
+        <button id="next-btn" class="mt-4 bg-gradient-to-r from-[#ff8c42] to-[#ff6a6a] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">ข้อถัดไป</button>
+      <% } %>
+    </div>
+  </div>
+  <div class="bg-white rounded-2xl shadow p-6 mt-6">
+    <h3 class="text-lg font-semibold mb-2">คะแนน</h3>
+    <ul id="score-list">
+      <% players.forEach(function(player) { %>
+        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>">👤 <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
+      <% }); %>
+    </ul>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const roomId = '<%= room.id %>';
+  const user = { id: <%= user.id %>, name: '<%= user.name %>' };
+  const isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
+  let questions = <%- JSON.stringify(questions) %>;
+  let currentQuestion = 0;
+  let answered = false;
+  let startTime = null;
+
+  // Join room
+  socket.emit('join_room', roomId, user);
+
+  // Update player list real-time
+  socket.on('user_joined', data => {
+    fetch(`/api/room-players/${roomId}`)
+      .then(res => res.json())
+      .then(players => {
+        const list = document.getElementById('player-list');
+        const scoreList = document.getElementById('score-list');
+        list.innerHTML = '';
+        scoreList.innerHTML = '';
+        players.forEach(player => {
+          list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}">👤 ${player.name} <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score}</span></li>`;
+          scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}">👤 ${player.name} <span class="ml-2 text-green-600 font-bold">+<span id="score-${player.id}">${player.score}</span></span></li>`;
+        });
+        document.getElementById('player-count').textContent = players.length;
+      });
+  });
+
+  // Owner starts game
+  if (isOwner) {
+    document.getElementById('start-btn').onclick = () => {
+      socket.emit('start_game', roomId);
+      showQuestion();
+      document.getElementById('start-btn').classList.add('hidden');
+      document.getElementById('next-btn').classList.remove('hidden');
+    };
+    document.getElementById('next-btn').onclick = () => {
+      socket.emit('next_question', roomId);
+    };
+  }
+
+  // Listen for game start
+  socket.on('game_started', () => {
+    showQuestion();
+    document.getElementById('waiting-area').classList.add('hidden');
+    if (!isOwner) {
+      document.getElementById('start-btn')?.classList.add('hidden');
+    }
+  });
+
+  // Listen for next question
+  socket.on('next_question', () => {
+    currentQuestion++;
+    showQuestion();
+    answered = false;
+  });
+
+  // Show question
+  function showQuestion() {
+    const q = questions[currentQuestion];
+    if (!q) return;
+    const gameArea = document.getElementById('game-area');
+    gameArea.innerHTML = `
+      <div class="mb-4">
+        <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion+1}: ${q.question_text}</div>
+        <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${[q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => `<button class='choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl' data-idx='${i}'>${c}</button>`).join('')}
+      </div>
+      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
+    `;
+    startTime = Date.now();
+    document.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.onclick = () => {
+        if (answered) return;
+        answered = true;
+        const answerIdx = btn.getAttribute('data-idx');
+        const answerTime = Date.now() - startTime;
+        socket.emit('submit_answer', { roomId, userId: user.id, answerIndex: answerIdx, answerTime });
+        btn.classList.add('bg-green-300');
+      };
+    });
+  }
+
+  // Listen for user answered (update score)
+  socket.on('user_answered', data => {
+    // TODO: update score in UI
+    if (data.userId && data.score !== undefined) {
+      document.getElementById('score-' + data.userId).textContent = data.score;
+    }
+  });
+</script> 

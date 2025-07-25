@@ -137,3 +137,35 @@ exports.createRoomPost = (req, res) => {
     res.status(500).render('create-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
   }
 };
+
+exports.gameRoomPage = (req, res) => {
+  try {
+    if (!req.user) {
+      return res.redirect('/login');
+    }
+    const roomId = req.params.roomId;
+    usersDB.get('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id WHERE rooms.id = ?', [roomId], (err, room) => {
+      if (err || !room) {
+        return res.status(404).render('quiz', { error: 'ไม่พบห้องนี้', layout: 'layouts/main' });
+      }
+      // ดึงผู้เล่นในห้อง
+      usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err2, players) => {
+        if (err2) players = [];
+        // ดึงคำถามทั้งหมดของห้องนี้
+        usersDB.all('SELECT * FROM questions WHERE room_id = ?', [roomId], (err3, questions) => {
+          if (err3) questions = [];
+          res.render('game-room', {
+            layout: 'layouts/main',
+            user: req.user,
+            room,
+            players,
+            questions
+          });
+        });
+      });
+    });
+  } catch (err) {
+    console.error('GameRoomPage error:', err);
+    res.status(500).render('quiz', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
+  }
+};
