@@ -54,6 +54,8 @@ app.use(cookieParser());
 
 app.use(authenticateJWT);
 
+app.use("/", require("./src/routes/room.routes"));
+
 // Layout
 app.use(expressLayouts);
 app.set("layout", "layouts/main");

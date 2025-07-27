@@ -26,6 +26,12 @@
           <div class="mb-2">จำนวนผู้เล่นสูงสุด: <span class="font-semibold"><%= room.max_players %></span></div>
           <div class="mb-2">ประเภท: <span class="font-semibold"><%= room.is_private ? 'ส่วนตัว' : 'สาธารณะ' %></span></div>
           <div class="mb-2 flex items-center gap-2">สีห้อง: <span style="display:inline-block;width:24px;height:24px;background:<%= room.room_color %>;border-radius:5px;vertical-align:middle;"></span></div>
+          <!-- ปุ่มลบห้อง -->
+          <form action="/room/<%= room._id %>?_method=DELETE" method="POST" onsubmit="return confirm('คุณต้องการลบห้องนี้จริงหรือไม่?');" class="mt-4 w-full flex justify-center">
+            <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-2 rounded-xl text-base transition-all duration-200 shadow flex items-center gap-2">
+              <i class="fa-solid fa-trash"></i> ลบห้อง
+            </button>
+          </form>
         </div>
       <% } else { %>
         <form action="/create-room" method="POST" class="w-full max-w-md flex flex-col gap-5 bg-white/80 rounded-xl p-8 shadow-lg mt-2">

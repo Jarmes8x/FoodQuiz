@@ -17,6 +17,13 @@
         </div>
       </div>
       <% if (user.id === room.creator_id) { %>
+        <form action="/room/<%= room.id %>?_method=DELETE" method="POST" onsubmit="return confirm('คุณต้องการลบห้องนี้จริงหรือไม่?');" class="mt-4 w-full flex justify-center">
+          <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold px-8 py-3 rounded-2xl text-lg w-full flex items-center justify-center gap-2">
+            <i class="fa-solid fa-trash"></i> ลบห้อง
+          </button>
+        </form>
+      <% } %>
+      <% if (user.id === room.creator_id) { %>
         <button id="start-btn" class="mt-4 bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">เริ่มเกม</button>
         <button id="next-btn" class="mt-4 bg-gradient-to-r from-[#ff8c42] to-[#ff6a6a] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">ข้อถัดไป</button>
       <% } %>

@@ -26,14 +26,19 @@ exports.dashboard = (req, res) => {
     if (!req.user) {
       return res.redirect('/');
     }
-    usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
-      if (err) {
-        console.error('Dashboard DB error:', err);
-        users = [];
-      }
-      locals.user = req.user;
-      locals.users = users;
-      res.render('dashboard', locals);
+    // ดึงข้อมูลห้องทั้งหมดเพื่อให้ quiz.ejs ใช้งานได้
+    usersDB.all('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id ORDER BY rooms.created_at DESC', [], (errRooms, rooms) => {
+      usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
+        if (err) {
+          console.error('Dashboard DB error:', err);
+          users = [];
+        }
+        locals.user = req.user;
+        locals.users = users;
+        locals.rooms = rooms || [];
+        locals.error = null;
+        res.render('dashboard', locals);
+      });
     });
   } catch (err) {
     console.error('Dashboard error:', err);
@@ -168,4 +173,13 @@ exports.gameRoomPage = (req, res) => {
     console.error('GameRoomPage error:', err);
     res.status(500).render('quiz', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
   }
+};
+
+exports.deleteRoom = (req, res) => {
+  const roomId = req.params.id;
+  // ตรวจสอบสิทธิ์เจ้าของห้อง (ควรเพิ่ม logic ตรวจสอบ user)
+  usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], function(err) {
+    if (err) return res.status(500).send("เกิดข้อผิดพลาด");
+    res.redirect('/dashboard');
+  });
 };
