@@ -92,11 +92,35 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-  const socket = io();
-  // Listen for real-time player count updates
-  socket.on('update_room_player_count', data => {
-    // data: { roomId, count }
-    const el = document.querySelector(`.player-count[data-room-id='${data.roomId}']`);
-    if (el) el.textContent = data.count;
+  // สมมติว่ามีการเชื่อมต่อ socket.io แล้ว
+const socket = io();
+
+// เมื่อเจ้าของห้องกดเริ่มเกม
+function startGame(roomId, ownerId) {
+  socket.emit('start_game', roomId, ownerId);
+}
+
+// รับ event select_questions (เฉพาะเจ้าของห้อง)
+socket.on('select_questions', function(questions) {
+  // แสดง UI ให้เจ้าของห้องเลือกคำถาม
+  // ตัวอย่าง: แสดง modal หรือ list คำถาม
+  showQuestionSelectionModal(questions);
+});
+
+function showQuestionSelectionModal(questions) {
+  // ตัวอย่าง: สร้าง modal หรือ popup
+  let html = '<div class="modal"><h3>เลือกคำถามสำหรับเกมนี้</h3><ul>';
+  questions.forEach((q, idx) => {
+    html += `<li>${idx + 1}. ${q.question_text}</li>`;
   });
+  html += '</ul><button onclick="confirmQuestions()">ยืนยัน</button></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function confirmQuestions() {
+  // ส่ง event ไป backend ว่าเลือกคำถามชุดนี้ (หรือเลือก subset ก็ได้)
+  // ตัวอย่าง: socket.emit('questions_selected', questions);
+  // ปิด modal
+  document.querySelector('.modal').remove();
+}
 </script>

@@ -23,12 +23,22 @@ io.on('connection', (socket) => {
     // Query จำนวนผู้เล่นในห้องนี้แล้ว broadcast ไปยังทุกคน (quiz.ejs)
     usersDB.all('SELECT COUNT(*) as count FROM room_players WHERE room_id = ?', [roomId], (err, rows) => {
       const count = rows && rows[0] ? rows[0].count : 0;
-      io.emit('update_room_player_count', { roomId, count });
+      io.to(`room_${roomId}`).emit('update_room_player_count', { roomId, count });
     });
   });
 
-  socket.on('start_game', (roomId) => {
-    io.to(`room_${roomId}`).emit('game_started');
+  socket.on('start_game', (roomId, ownerId) => {
+    // ดึงคำถามจากฐานข้อมูล (สุ่ม 10 ข้อ)
+    usersDB.all('SELECT * FROM questions ORDER BY RANDOM() LIMIT 10', [], (err, questions) => {
+      if (err) {
+        io.to(`room_${roomId}`).emit('game_error', { message: 'ไม่สามารถดึงคำถามได้' });
+        return;
+      }
+      // ส่งคำถามไปให้เจ้าของห้องเลือก (ownerId คือ userId ของเจ้าของห้อง)
+      // สมมติว่า client ส่ง ownerId มาด้วย
+      io.to(socket.id).emit('select_questions', questions); // ส่งให้ socket ที่กดเริ่มเกม (เจ้าของห้อง)
+      // หมายเหตุ: ถ้าอยาก broadcast ให้ทุกคนในห้องเห็น ให้ใช้ io.to(`room_${roomId}`).emit(...)
+    });
   });
 
   socket.on('submit_answer', (data) => {

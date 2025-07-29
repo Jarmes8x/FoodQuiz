@@ -112,7 +112,8 @@ exports.createRoomPost = (req, res) => {
       return res.redirect('/login');
     }
     const userId = req.user.id;
-    const { name, max_players, is_private, password, room_color } = req.body;
+    const { name, is_private, password, room_color } = req.body;
+    const max_players = 5; // บังคับให้เล่นได้ 5 คนเสมอ (ไม่รวม creator)
     usersDB.get('SELECT * FROM rooms WHERE creator_id = ?', [userId], (err, room) => {
       if (err) {
         console.error('CreateRoomPost DB error:', err);
@@ -123,7 +124,7 @@ exports.createRoomPost = (req, res) => {
       }
       usersDB.run(
         'INSERT INTO rooms (name, creator_id, max_players, is_private, password, room_color) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, userId, max_players || 10, is_private ? 1 : 0, password || null, room_color || '#FFFFFF'],
+        [name, userId, max_players, is_private ? 1 : 0, password || null, room_color || '#FFFFFF'],
         function (err) {
           if (err) {
             console.error('Room creation error:', err);
@@ -133,6 +134,8 @@ exports.createRoomPost = (req, res) => {
             }
             return res.render('create-room', { error: errorMsg, room: null, user: req.user });
           }
+          // ไม่ต้องเพิ่ม creator เป็นผู้เล่นใน room_players
+          // สามารถเพิ่ม logic ให้ creator เลือกคำถามได้ในหน้า quiz หรือหน้า admin room
           res.redirect('/quiz');
         }
       );

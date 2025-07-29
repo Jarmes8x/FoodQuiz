@@ -69,6 +69,13 @@
       });
   });
 
+  // ฟัง event update_room_player_count เพื่ออัปเดตจำนวนผู้เล่นแบบ real-time
+  socket.on('update_room_player_count', data => {
+    if (data && data.roomId == roomId) {
+      document.getElementById('player-count').textContent = data.count;
+    }
+  });
+
   // Owner starts game
   if (isOwner) {
     document.getElementById('start-btn').onclick = () => {

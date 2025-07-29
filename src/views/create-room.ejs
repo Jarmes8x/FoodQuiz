@@ -27,7 +27,7 @@
           <div class="mb-2">ประเภท: <span class="font-semibold"><%= room.is_private ? 'ส่วนตัว' : 'สาธารณะ' %></span></div>
           <div class="mb-2 flex items-center gap-2">สีห้อง: <span style="display:inline-block;width:24px;height:24px;background:<%= room.room_color %>;border-radius:5px;vertical-align:middle;"></span></div>
           <!-- ปุ่มลบห้อง -->
-          <form action="/room/<%= room._id %>?_method=DELETE" method="POST" onsubmit="return confirm('คุณต้องการลบห้องนี้จริงหรือไม่?');" class="mt-4 w-full flex justify-center">
+          <form action="/room/<%= room.id %>?_method=DELETE" method="POST" onsubmit="return confirm('คุณต้องการลบห้องนี้จริงหรือไม่?');" class="mt-4 w-full flex justify-center">
             <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-2 rounded-xl text-base transition-all duration-200 shadow flex items-center gap-2">
               <i class="fa-solid fa-trash"></i> ลบห้อง
             </button>
@@ -39,7 +39,8 @@
             <input type="text" name="name" value="ห้องของ <%= user.name %>" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" required>
           </label>
           <label class="font-medium text-gray-700">จำนวนผู้เล่นสูงสุด
-            <input type="number" name="max_players" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" min="2" max="20" value="10">
+            <input type="number" name="max_players" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" min="5" max="5" value="5" readonly>
+            <span class="text-xs text-gray-500">* จำกัดผู้เล่น 5 คนต่อห้อง (ไม่รวมผู้สร้างห้อง)</span>
           </label>
           <label class="font-medium flex items-center gap-2 text-gray-700">
             <input type="checkbox" name="is_private" value="1" id="is_private_checkbox" class="accent-purple-500"> ห้องส่วนตัว (ไม่บังคับ)
@@ -95,6 +96,9 @@
                 <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
               </label>
             </div>
+          </div>
+          <div class="text-sm text-purple-700 bg-purple-50 rounded-lg px-4 py-2 mb-2">
+            <i class="fa-solid fa-info-circle"></i> ผู้สร้างห้องจะไม่สามารถเข้าร่วมเล่นเกมในห้องนี้ แต่จะสามารถเลือกคำถามและควบคุมเกมได้
           </div>
           <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2">
             <i class="fa-solid fa-plus"></i> สร้างห้อง
