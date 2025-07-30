@@ -1,3 +1,8 @@
+<script>
+  const user = <%- JSON.stringify({ id: user.id, name: user.name }) %>;
+  const isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
+  let questions = <%- JSON.stringify(questions) %>;
+</script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
   <div class="flex flex-col md:flex-row gap-6 mb-6">
@@ -36,18 +41,96 @@
         <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>">👤 <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
       <% }); %>
     </ul>
+    <!-- ส่วนซื้อวัตถุดิบและสุ่มอาหาร -->
+    <div id="ingredient-shop" class="mt-8">
+      <h3 class="text-lg font-semibold mb-2">ร้านขายวัตถุดิบ</h3>
+      <div class="mb-2">แต้มของคุณ: <span id="my-points">0</span></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+        <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients)) { %>
+          <% ingredients.forEach(function(ing) { %>
+            <button class="ingredient-btn bg-yellow-100 hover:bg-yellow-200 rounded-xl px-4 py-2 font-bold" data-ingredient="<%= ing.name %>"><%= ing.name %> (<%= ing.price %> แต้ม)</button>
+          <% }); %>
+        <% } else { %>
+          <button disabled class="bg-gray-200 rounded-xl px-4 py-2 font-bold">ไม่มีข้อมูลวัตถุดิบ</button>
+        <% } %>
+      </div>
+      <div class="mb-2">วัตถุดิบของคุณ: <span id="my-ingredients"></span></div>
+      <button id="random-food-btn" class="bg-gradient-to-r from-green-400 to-blue-400 text-white font-bold px-6 py-2 rounded-xl mt-2">สุ่มอาหารจากวัตถุดิบของฉัน</button>
+      <div class="mt-2">อาหารที่คุณได้รับ: <span id="my-food" class="font-bold text-purple-700"></span></div>
+    </div>
   </div>
 </div>
 <script src="/socket.io/socket.io.js"></script>
 <script>
   const socket = io();
-  const roomId = '<%= room.id %>';
-  const user = { id: <%= user.id %>, name: '<%= user.name %>' };
-  const isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
-  let questions = <%- JSON.stringify(questions) %>;
   let currentQuestion = 0;
   let answered = false;
   let startTime = null;
+  // สำหรับวัตถุดิบและอาหาร
+  let myPoints = 0;
+  let myIngredients = [];
+  let myFood = '';
+
+
+  // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
+  function updateMyShopUI() {
+    document.getElementById('my-points').textContent = myPoints;
+    document.getElementById('my-ingredients').textContent = myIngredients.join(', ') || '-';
+    document.getElementById('my-food').textContent = myFood;
+  }
+
+  socket.on('update_points_ingredients', data => {
+    if (data.userId === user.id) {
+      myPoints = data.points;
+      myIngredients = data.ingredients || [];
+      myFood = data.food || '';
+      updateMyShopUI();
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.ingredient-btn').forEach(btn => {
+      btn.onclick = () => {
+        const ing = btn.getAttribute('data-ingredient');
+        socket.emit('buy_ingredient', { roomId, userId: user.id, ingredient: ing });
+      };
+    });
+    document.getElementById('random-food-btn').onclick = () => {
+      socket.emit('random_food', { roomId, userId: user.id });
+    };
+    updateMyShopUI();
+  });
+
+  // อัปเดตแต้มและวัตถุดิบของฉัน
+  function updateMyShopUI() {
+    document.getElementById('my-points').textContent = myPoints;
+    document.getElementById('my-ingredients').textContent = myIngredients.join(', ') || '-';
+    document.getElementById('my-food').textContent = myFood;
+  }
+
+  // รับ event อัปเดตแต้ม/วัตถุดิบ (หลังจบเกมหรือซื้อวัตถุดิบ)
+  socket.on('update_points_ingredients', data => {
+    if (data.userId === user.id) {
+      myPoints = data.points;
+      myIngredients = data.ingredients || [];
+      myFood = data.food || '';
+      updateMyShopUI();
+    }
+  });
+
+  // ซื้อวัตถุดิบ
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.ingredient-btn').forEach(btn => {
+      btn.onclick = () => {
+        const ing = btn.getAttribute('data-ingredient');
+        socket.emit('buy_ingredient', { roomId, userId: user.id, ingredient: ing });
+      };
+    });
+    document.getElementById('random-food-btn').onclick = () => {
+      socket.emit('random_food', { roomId, userId: user.id });
+    };
+    updateMyShopUI();
+  });
 
   // Join room
   socket.emit('join_room', roomId, user);
@@ -76,18 +159,192 @@
     }
   });
 
+
   // Owner starts game
   if (isOwner) {
     document.getElementById('start-btn').onclick = () => {
-      socket.emit('start_game', roomId);
-      showQuestion();
+      socket.emit('start_game', roomId, user.id);
       document.getElementById('start-btn').classList.add('hidden');
-      document.getElementById('next-btn').classList.remove('hidden');
     };
     document.getElementById('next-btn').onclick = () => {
       socket.emit('next_question', roomId);
     };
   }
+
+  // รับ event select_questions (เฉพาะเจ้าของห้อง)
+  socket.on('select_questions', function(questions) {
+    // แสดง UI ให้เจ้าของห้องเลือกคำถาม (เลือก 14 ข้อ)
+    let html = `<div id="question-select-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 max-w-2xl w-full">
+        <h3 class="text-xl font-bold mb-4">เลือกคำถามสำหรับเกมนี้ (เลือก 14 ข้อ)</h3>
+        <div id="question-select-alert" class="mb-2 text-red-600 font-semibold hidden">เลือกครบ 14 ข้อแล้ว</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto mb-4">
+          ${questions.map((q, i) => `
+            <label class="flex items-start gap-2">
+              <input type="checkbox" class="q-checkbox" value="${q.id}">
+              <span>${i+1}. ${q.question_text}</span>
+            </label>
+          `).join('')}
+        </div>
+        <button id="confirm-questions-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-2 rounded-xl">ยืนยัน</button>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    // เพิ่ม event สำหรับแจ้งเตือนเมื่อเลือกครบ 14 ข้อ
+    const checkboxes = document.querySelectorAll('.q-checkbox');
+    const alert14 = document.getElementById('question-select-alert');
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
+        if (checkedCount === 14) {
+          alert14.classList.remove('hidden');
+        } else {
+          alert14.classList.add('hidden');
+        }
+      });
+    });
+    document.getElementById('confirm-questions-btn').onclick = () => {
+      const checked = Array.from(document.querySelectorAll('.q-checkbox:checked')).map(cb => parseInt(cb.value));
+      if (checked.length !== 14) {
+        alert('กรุณาเลือก 14 ข้อ');
+        return;
+      }
+      // ส่ง id ของคำถามที่เลือกไป backend
+      const selected = questions.filter(q => checked.includes(q.id));
+      socket.emit('questions_selected', roomId, selected);
+      document.getElementById('question-select-modal').remove();
+      document.getElementById('next-btn').classList.remove('hidden');
+    };
+  });
+
+  // รับชุดคำถามที่ใช้เล่นจริง (ทุกคนในห้อง)
+  socket.on('game_questions', function(selectedQuestions) {
+    // สุ่มลำดับคำถามใหม่ก่อนเริ่มเกม
+    questions = shuffleArray(selectedQuestions);
+    currentQuestion = 0;
+    document.getElementById('waiting-area')?.classList.add('hidden');
+    if (!isOwner) {
+      document.getElementById('start-btn')?.classList.add('hidden');
+    }
+    // เริ่มเกมด้วยฟังก์ชั่น runGame
+    runGame();
+  // ฟังก์ชั่นหลักสำหรับรันเกมทีละข้อ
+  function runGame() {
+    if (currentQuestion >= questions.length) {
+      showSummary();
+      return;
+    }
+    showCountdown(20, () => {
+      showQuestionWithTimer(15, () => {
+        showAnswer();
+        setTimeout(() => {
+          currentQuestion++;
+          runGame();
+        }, 3000); // แสดงเฉลย 3 วินาที
+      });
+    });
+  }
+
+  // แสดงคำถามพร้อมจับเวลา (15 วินาที)
+  function showQuestionWithTimer(seconds, onFinish) {
+    const q = questions[currentQuestion];
+    if (!q) return;
+    const gameArea = document.getElementById('game-area');
+    let timeLeft = seconds;
+    gameArea.innerHTML = `
+      <div class="mb-4">
+        <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion+1}: ${q.question_text}</div>
+        <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
+        <div class="text-lg text-purple-700 font-bold mb-2">เวลาที่เหลือ: <span id='question-timer'>${timeLeft}</span> วินาที</div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${[q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => `<button class='choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl' data-idx='${i}'>${c}</button>`).join('')}
+      </div>
+      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
+    `;
+    answered = false;
+    startTime = Date.now();
+    document.querySelectorAll('.choice-btn').forEach(btn => {
+      btn.onclick = () => {
+        if (answered) return;
+        answered = true;
+        const answerIdx = btn.getAttribute('data-idx');
+        const answerTime = Date.now() - startTime;
+        socket.emit('submit_answer', { roomId, userId: user.id, answerIndex: answerIdx, answerTime });
+        btn.classList.add('bg-green-300');
+      };
+    });
+    // จับเวลา
+    const timer = setInterval(() => {
+      timeLeft--;
+      const timerEl = document.getElementById('question-timer');
+      if (timerEl) timerEl.textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        if (typeof onFinish === 'function') onFinish();
+      }
+    }, 1000);
+  }
+
+  // แสดงเฉลยคำตอบ
+  function showAnswer() {
+    const q = questions[currentQuestion];
+    const gameArea = document.getElementById('game-area');
+    let answerText = [q.choice1, q.choice2, q.choice3, q.choice4][q.answer_index-1];
+    gameArea.innerHTML += `<div class="mt-4 text-green-700 font-bold text-lg">เฉลย: ${answerText}</div>`;
+  }
+
+  // สรุปคะแนนและจัดอันดับ
+  function showSummary() {
+    // สมมติว่ามี scoreList ใน DOM และคะแนนอัปเดตแล้ว
+    // ดึงคะแนนจาก DOM
+    let playerEls = document.querySelectorAll('#score-list li');
+    let players = [];
+    playerEls.forEach(li => {
+      const name = li.textContent.match(/👤\s*(.*?)\s*\+/)[1];
+      const score = parseInt(li.querySelector('span[id^="score-"]').textContent) || 0;
+      players.push({ name, score, el: li });
+    });
+    // จัดอันดับ
+    players.sort((a, b) => b.score - a.score);
+    // ให้คะแนนอันดับ 1 ได้ 4 คะแนน, 2 ได้ 3, 3 ได้ 2, 4 ได้ 1, 5 ได้ 0
+    players.forEach((p, idx) => {
+      let rankScore = Math.max(4-idx, 0);
+      p.rankScore = rankScore;
+    });
+    // แสดงผล
+    let html = `<div class="text-2xl font-bold mb-4 text-center text-purple-700">สรุปผลคะแนน</div><ol class="list-decimal pl-8">`;
+    players.forEach((p, idx) => {
+      html += `<li class="mb-2 text-lg">${idx+1}. ${p.name} <span class="text-green-700 font-bold">${p.score} คะแนน</span> <span class="text-blue-700 font-bold">(+${p.rankScore} อันดับ)</span></li>`;
+    });
+    html += '</ol>';
+    document.getElementById('game-area').innerHTML = html;
+  }
+  // ฟังก์ชั่นนับถอยหลัง
+  function showCountdown(seconds, onFinish) {
+    const gameArea = document.getElementById('game-area');
+    let timeLeft = seconds;
+    gameArea.innerHTML = `<div class="text-3xl font-bold text-purple-700 mb-4">เกมจะเริ่มใน <span id='countdown-timer'>${timeLeft}</span> วินาที</div>`;
+    const timer = setInterval(() => {
+      timeLeft--;
+      document.getElementById('countdown-timer').textContent = timeLeft;
+      if (timeLeft <= 0) {
+        clearInterval(timer);
+        if (typeof onFinish === 'function') onFinish();
+      }
+    }, 1000);
+  }
+
+  // ฟังก์ชั่นสุ่ม array (Fisher-Yates)
+  function shuffleArray(array) {
+    let arr = array.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  });
 
   // Listen for game start
   socket.on('game_started', () => {
