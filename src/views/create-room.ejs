@@ -51,13 +51,13 @@
           <div class="font-medium text-gray-700">
             <label>สีห้อง</label>
             <div class="mt-2 grid grid-cols-5 gap-2">
-              <input type="radio" name="room_color" value="#ffadad" id="color1" class="hidden">
-              <label for="color1" class="w-10 h-10 bg-[#ffadad] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
-                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
-              </label>
-
               <input type="radio" name="room_color" value="#a0e7e5" id="color2" class="hidden">
               <label for="color2" class="w-10 h-10 bg-[#a0e7e5] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
+                <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
+              </label>
+              
+              <input type="radio" name="room_color" value="#ffadad" id="color1" class="hidden">
+              <label for="color1" class="w-10 h-10 bg-[#ffadad] rounded-lg cursor-pointer border-2 border-transparent hover:border-gray-400 transition-all duration-200 flex items-center justify-center">
                 <i class="fa-solid fa-check text-white opacity-0 check-icon"></i>
               </label>
 
@@ -100,9 +100,13 @@
           <div class="text-sm text-purple-700 bg-purple-50 rounded-lg px-4 py-2 mb-2">
             <i class="fa-solid fa-info-circle"></i> ผู้สร้างห้องจะไม่สามารถเข้าร่วมเล่นเกมในห้องนี้ แต่จะสามารถเลือกคำถามและควบคุมเกมได้
           </div>
-          <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2">
+          <button type="submit" class="cursor-pointer bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2">
             <i class="fa-solid fa-plus"></i> สร้างห้อง
           </button>
+          <a href="/quiz"
+            class="bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold px-8 py-3 rounded-2xl text-lg transition-all duration-300 ease-out text-center shadow-lg flex items-center justify-center gap-2">
+            <i class="fa-solid fa-times"></i> ยกเลิก
+          </a>
         </form>
       <% } %>
     </div>

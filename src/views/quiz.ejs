@@ -14,9 +14,15 @@
         <h2 class="text-black text-3xl md:text-4xl font-extrabold mb-2 text-shadow">เลือกห้องสำหรับเล่นเกมตอบคำถาม</h2>
         <p class="text-black text-lg opacity-90 mb-4 font-medium">เป็นเจ้าของห้องและเชิญเพื่อนมาเล่นด้วยกัน</p>
       </div>
-      <a href="/create-room" class="bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] hover:scale-105 text-white cursor-pointer font-bold px-8 py-3 rounded-2xl inline-block text-lg transition-all duration-300 ease-out">
-        <i class="fa-solid fa-plus"></i> สร้างห้อง
-      </a>
+      <% if (user.room_id) { %>
+        <a href="/edit-room" class="bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] hover:scale-105 text-white cursor-pointer font-bold px-8 py-3 rounded-2xl inline-block text-lg transition-all duration-300 ease-out">
+          <i class="fa-solid fa-edit"></i> แก้ไขห้อง
+        </a>
+      <% } else { %>
+        <a href="/create-room" class="bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] hover:scale-105 text-white cursor-pointer font-bold px-8 py-3 rounded-2xl inline-block text-lg transition-all duration-300 ease-out">
+          <i class="fa-solid fa-plus"></i> สร้างห้อง
+        </a>
+      <% } %>
     </div>
   </div>
 </div>
@@ -34,7 +40,7 @@
       <% rooms.forEach(function(room) { %>
         <div class="group bg-white rounded-3xl shadow-lg hover:shadow-2xl border-2 transition-all duration-500 overflow-hidden <%= room.owner_name == user.name ? 'border-amber-400' : 'border-gray-100 hover:border-blue-200' %>">
           <!-- Header with room color -->
-          <div class="p-6 relative" style="background: <%= room.room_color %>;">
+          <div class="p-6 relative" style="background: <%- room.room_color %>;">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3">
                 <div class="w-3 h-3 rounded-full border-2 border-white shadow bg-black"></div>
@@ -64,10 +70,10 @@
             </div>
 
             <!-- Join button -->
-            <button class="cursor-pointer w-full bg-purple-600 hover:bg-purple-700 text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2" 
+            <button class="<%= (room.owner_name == user.name) ? 'bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00]' : 'bg-purple-600 hover:bg-purple-700' %> cursor-pointer w-full text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2" 
               onclick="window.location.href='/game-room/<%= room.id %>'">
               <% if (room.owner_name == user.name) { %>
-                <i class="fa-solid fa-edit mr-2"></i> แก้ไขห้อง
+                <i class="fa-solid fa-play"></i>ดำเนินการห้องต่อ
               <% } else { %>
                 <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> เข้าร่วมเกม
               <% } %>

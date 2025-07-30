@@ -18,6 +18,7 @@ usersDB.serialize(() => {
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
+      email TEXT UNIQUE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
   `, (err) => {
@@ -75,6 +76,7 @@ usersDB.serialize(() => {
       is_owner BOOLEAN DEFAULT 0,
       answered BOOLEAN DEFAULT 0,
       answer_time DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (room_id) REFERENCES rooms(id),
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
