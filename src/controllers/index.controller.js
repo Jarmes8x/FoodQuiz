@@ -166,12 +166,17 @@ exports.gameRoomPage = (req, res) => {
         // ดึงคำถามทั้งหมดของห้องนี้
         usersDB.all('SELECT * FROM questions WHERE room_id = ?', [roomId], (err3, questions) => {
           if (err3) questions = [];
-          res.render('game-room', {
-            layout: 'layouts/main',
-            user: req.user,
-            room,
-            players,
-            questions
+          // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient (หรือ meal_ingredient ถ้ามี)
+          usersDB.all('SELECT name, price FROM ingredient', [], (err4, ingredients) => {
+            if (err4) ingredients = [];
+            res.render('game-room', {
+              layout: 'layouts/main',
+              user: req.user,
+              room,
+              players,
+              questions,
+              ingredients
+            });
           });
         });
       });
@@ -253,24 +258,25 @@ exports.deleteRoom = (req, res) => {
     }
     const roomId = req.params.id;
     const userId = req.user.id;
-    
     // ตรวจสอบสิทธิ์เจ้าของห้อง
     usersDB.get('SELECT * FROM rooms WHERE id = ? AND creator_id = ?', [roomId, userId], (err, room) => {
       if (err || !room) {
         return res.status(404).json({ error: 'ไม่พบห้องหรือไม่มีสิทธิ์ลบ' });
       }
-      
       // ลบห้องและข้อมูลที่เกี่ยวข้อง
       usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err1) => {
         if (err1) console.error('Delete room_players error:', err1);
-        
         usersDB.run('DELETE FROM questions WHERE room_id = ?', [roomId], (err2) => {
           if (err2) console.error('Delete questions error:', err2);
-          
           usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err3) => {
             if (err3) {
               console.error('Delete room error:', err3);
               return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
+            }
+            // --- Notify all users in the room via socket.io ---
+            const io = req.app.get('io');
+            if (io) {
+              io.to(`room_${roomId}`).emit('room_deleted', { message: 'ห้องนี้ถูกลบโดยเจ้าของห้อง' });
             }
             res.json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
           });

@@ -19,6 +19,8 @@ const PORT = process.env.PORT || 3000;
 const http = require('http').createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(http);
+// ให้ route ใช้งาน io ได้
+app.set('io', io);
 
 // --- Socket.io event handlers ---
 io.on('connection', (socket) => {
@@ -98,8 +100,17 @@ io.on('connection', (socket) => {
 
   // รับชุดคำถามที่เจ้าของห้องเลือก แล้ว broadcast ให้ทุกคนในห้อง
   socket.on('questions_selected', (roomId, selectedQuestions) => {
-    // selectedQuestions: array of question objects (หรือ id)
-    io.to(`room_${roomId}`).emit('game_questions', selectedQuestions);
+    // Shuffle the selected questions ONCE and send to all clients
+    function shuffleArray(array) {
+      let arr = array.slice();
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+    const shuffled = shuffleArray(selectedQuestions);
+    io.to(`room_${roomId}`).emit('game_questions', shuffled);
     // เริ่มเกมทันที (หรือจะ emit 'game_started' แยกก็ได้)
   });
 
@@ -113,7 +124,11 @@ io.on('connection', (socket) => {
       answerIndex: parseInt(data.answerIndex),
       answerTime: data.answerTime
     });
-    io.to(`room_${data.roomId}`).emit('user_answered', data);
+    // ดึงคะแนนล่าสุดของ user นี้ แล้ว emit ไปพร้อมกัน
+    usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
+      const score = row ? row.score : 0;
+      io.to(`room_${data.roomId}`).emit('user_answered', { ...data, score });
+    });
   });
 
   // ฟังก์ชั่นคำนวณคะแนนและ broadcast เฉลย (เรียกจาก client ผ่าน event หรือ timer)

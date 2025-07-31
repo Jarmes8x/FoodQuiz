@@ -2,15 +2,38 @@
   const user = <%- JSON.stringify({ id: user.id, name: user.name }) %>;
   const isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
   let questions = <%- JSON.stringify(questions) %>;
+  const roomId = "<%= room.id %>";
 </script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
+  <!-- Modal แสดงอาหารที่สุ่มได้ -->
+  <div id="food-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-8 max-w-xs w-full text-center">
+      <h3 class="text-xl font-bold mb-4 text-purple-700">อาหารที่คุณได้รับ</h3>
+      <div id="food-modal-content" class="text-2xl font-bold text-green-700 mb-4"></div>
+      <button id="close-food-modal" class="bg-purple-500 hover:bg-purple-700 text-white font-bold px-6 py-2 rounded-xl">ปิด</button>
+    </div>
+  </div>
+  <!-- Modal แสดงวัตถุดิบทั้งหมด -->
+  <div id="ingredient-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-2xl p-8 max-w-md w-full text-center">
+      <h3 class="text-xl font-bold mb-4 text-yellow-700">วัตถุดิบทั้งหมดในเกม</h3>
+      <div id="ingredient-modal-content" class="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
+        <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients)) { %>
+          <% ingredients.forEach(function(ing) { %>
+            <div class="bg-yellow-100 rounded-xl px-4 py-2 font-bold"> <%= ing.name %> (<%= ing.price %> แต้ม)</div>
+          <% }); %>
+        <% } %>
+      </div>
+      <button id="close-ingredient-modal" class="bg-yellow-500 hover:bg-yellow-700 text-white font-bold px-6 py-2 rounded-xl">ปิด</button>
+    </div>
+  </div>
   <div class="flex flex-col md:flex-row gap-6 mb-6">
     <div class="flex-1 bg-white rounded-2xl shadow p-6">
       <h3 class="text-lg font-semibold mb-2">ผู้เล่นในห้อง (<span id="player-count"><%= players.length %></span>/<%= room.max_players %>)</h3>
       <ul id="player-list">
         <% players.forEach(function(player) { %>
-          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>">👤 <%= player.name %> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
+          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>" id="player-li-<%= player.id %>">👤 <span class="player-name"><%= player.name %></span> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
         <% }); %>
       </ul>
     </div>
@@ -71,6 +94,12 @@
   let myIngredients = [];
   let myFood = '';
 
+  // --- Room deleted event ---
+  socket.on('room_deleted', function(data) {
+    alert(data && data.message ? data.message : 'ห้องนี้ถูกลบแล้ว');
+    window.location.href = '/';
+  });
+
 
   // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
   function updateMyShopUI() {
@@ -83,10 +112,27 @@
     if (data.userId === user.id) {
       myPoints = data.points;
       myIngredients = data.ingredients || [];
-      myFood = data.food || '';
-      updateMyShopUI();
+      // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
+      if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
+        myFood = data.food;
+        updateMyShopUI();
+        showFoodModal(myFood);
+      } else {
+        myFood = data.food || '';
+        updateMyShopUI();
+      }
     }
   });
+  // ฟังก์ชั่นแสดงป๊อบอัพอาหาร
+  function showFoodModal(food) {
+    const modal = document.getElementById('food-modal');
+    const content = document.getElementById('food-modal-content');
+    content.textContent = food;
+    modal.classList.remove('hidden');
+  }
+  document.getElementById('close-food-modal').onclick = function() {
+    document.getElementById('food-modal').classList.add('hidden');
+  };
 
   document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.ingredient-btn').forEach(btn => {
@@ -118,8 +164,8 @@
     }
   });
 
-  // ซื้อวัตถุดิบ
-  document.addEventListener('DOMContentLoaded', () => {
+  // ฟังก์ชันเปิดใช้งาน shop หลังเริ่มเกมเท่านั้น
+  function enableIngredientShop() {
     document.querySelectorAll('.ingredient-btn').forEach(btn => {
       btn.onclick = () => {
         const ing = btn.getAttribute('data-ingredient');
@@ -130,6 +176,31 @@
       socket.emit('random_food', { roomId, userId: user.id });
     };
     updateMyShopUI();
+  }
+
+  // --- Ingredient Modal Logic ---
+  function showIngredientModal() {
+    document.getElementById('ingredient-modal').classList.remove('hidden');
+  }
+  document.getElementById('close-ingredient-modal').onclick = function() {
+    document.getElementById('ingredient-modal').classList.add('hidden');
+  };
+
+  // เรียกใช้ enableIngredientShop เมื่อเกมเริ่มเท่านั้น
+  // --- Game Start: Show ingredient modal, then randomize food, then show food modal ---
+  let gameStartHandled = false;
+  socket.on('game_started', () => {
+    if (gameStartHandled) return;
+    gameStartHandled = true;
+    enableIngredientShop();
+    // 1. Show ingredient modal
+    showIngredientModal();
+    // 2. After closing ingredient modal, randomize food and show food modal
+    document.getElementById('close-ingredient-modal').onclick = function() {
+      document.getElementById('ingredient-modal').classList.add('hidden');
+      // Trigger food randomization for this user
+      socket.emit('random_food', { roomId, userId: user.id });
+    };
   });
 
   // Join room
@@ -145,7 +216,7 @@
         list.innerHTML = '';
         scoreList.innerHTML = '';
         players.forEach(player => {
-          list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}">👤 ${player.name} <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score}</span></li>`;
+          list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}">👤 <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score}</span></li>`;
           scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}">👤 ${player.name} <span class="ml-2 text-green-600 font-bold">+<span id="score-${player.id}">${player.score}</span></span></li>`;
         });
         document.getElementById('player-count').textContent = players.length;
@@ -219,8 +290,8 @@
 
   // รับชุดคำถามที่ใช้เล่นจริง (ทุกคนในห้อง)
   socket.on('game_questions', function(selectedQuestions) {
-    // สุ่มลำดับคำถามใหม่ก่อนเริ่มเกม
-    questions = shuffleArray(selectedQuestions);
+    // ใช้ลำดับคำถามที่ backend ส่งมา (ไม่ต้อง shuffle อีก)
+    questions = selectedQuestions;
     currentQuestion = 0;
     document.getElementById('waiting-area')?.classList.add('hidden');
     if (!isOwner) {
@@ -346,8 +417,10 @@
   }
   });
 
-  // Listen for game start
+  // Listen for game start (question UI)
+  let selectedAnswerIdx = null;
   socket.on('game_started', () => {
+    selectedAnswerIdx = null;
     showQuestion();
     document.getElementById('waiting-area').classList.add('hidden');
     if (!isOwner) {
@@ -358,6 +431,7 @@
   // Listen for next question
   socket.on('next_question', () => {
     currentQuestion++;
+    selectedAnswerIdx = null;
     showQuestion();
     answered = false;
   });
@@ -367,34 +441,58 @@
     const q = questions[currentQuestion];
     if (!q) return;
     const gameArea = document.getElementById('game-area');
+    // สร้างปุ่มตัวเลือกโดย mark active ถ้าเลือกแล้ว
+    let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
+      let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
+      if (selectedAnswerIdx !== null && selectedAnswerIdx == i) btnClass += ' ring-4 ring-green-400';
+      return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${c}</button>`;
+    }).join('');
     gameArea.innerHTML = `
       <div class="mb-4">
         <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion+1}: ${q.question_text}</div>
         <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        ${[q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => `<button class='choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl' data-idx='${i}'>${c}</button>`).join('')}
+        ${choicesHtml}
       </div>
       <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
     `;
     startTime = Date.now();
     document.querySelectorAll('.choice-btn').forEach(btn => {
       btn.onclick = () => {
-        if (answered) return;
+        if (answered || selectedAnswerIdx !== null) return;
         answered = true;
-        const answerIdx = btn.getAttribute('data-idx');
+        selectedAnswerIdx = parseInt(btn.getAttribute('data-idx'));
         const answerTime = Date.now() - startTime;
-        socket.emit('submit_answer', { roomId, userId: user.id, answerIndex: answerIdx, answerTime });
-        btn.classList.add('bg-green-300');
+        socket.emit('submit_answer', { roomId, userId: user.id, answerIndex: selectedAnswerIdx, answerTime });
+        // แสดงปุ่มที่เลือกค้างไว้
+        document.querySelectorAll('.choice-btn').forEach((b, idx) => {
+          if (idx === selectedAnswerIdx) {
+            b.classList.add('ring-4', 'ring-green-400');
+          }
+          b.disabled = true;
+        });
       };
     });
   }
 
   // Listen for user answered (update score)
+  // --- ให้ทุก client แสดงปุ่มที่เลือกของตัวเองตรงกัน ---
   socket.on('user_answered', data => {
-    // TODO: update score in UI
+    // อัปเดตคะแนน
     if (data.userId && data.score !== undefined) {
       document.getElementById('score-' + data.userId).textContent = data.score;
+    }
+    // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
+    if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
+      selectedAnswerIdx = parseInt(data.answerIndex);
+      // อัปเดตปุ่มให้ active
+      document.querySelectorAll('.choice-btn').forEach((b, idx) => {
+        if (idx === selectedAnswerIdx) {
+          b.classList.add('ring-4', 'ring-green-400');
+        }
+        b.disabled = true;
+      });
     }
   });
 </script> 
