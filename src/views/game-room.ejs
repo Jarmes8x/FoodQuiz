@@ -20,8 +20,42 @@
       <h3 class="text-xl font-bold mb-4 text-yellow-700">วัตถุดิบทั้งหมดในเกม</h3>
       <div id="ingredient-modal-content" class="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
         <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients)) { %>
+          <% 
+            // Map ingredient name to image index (1-10.png)
+            const ingredientImgMap = {
+              'กะเพราะหมูสับ': 1,
+              'ข้าวผัดรถไฟ': 2,
+              'ส้มตำ': 3,
+              'ผัดเปรี้ยวหวาน': 4,
+              'แกงจืดหมูสับ': 5,
+              'หมูสับผัดไข่': 6,
+              'ไข่ตุ๋นกุ้ง': 7,
+              'น้ำพริกอ่องหมูสับ': 8,
+              'ยำกุ้งสุก': 9,
+              'ไข่เจียวทรงเครื่อง': 10
+            };
+          %>
           <% ingredients.forEach(function(ing) { %>
-            <div class="bg-yellow-100 rounded-xl px-4 py-2 font-bold"> <%= ing.name %> (<%= ing.price %> แต้ม)</div>
+            <div class="flex flex-col items-center bg-yellow-100 rounded-xl px-4 py-2 font-bold">
+              <div class="w-12 h-12 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
+                <% const imgIndex = ingredientImgMap[ing.name] || ingredientImgMap[ing.name.trim()]; %>
+                <% if (imgIndex) { %>
+                  <img src="/img/<%= imgIndex %>.png" 
+                      alt="<%= ing.name %>" 
+                      class="object-cover w-full h-full" 
+                      loading="lazy"
+                      onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                  <div style="display:none;" class="flex items-center justify-center">
+                    <i class="fa-solid fa-utensils text-yellow-400 text-lg"></i>
+                  </div>
+                <% } else { %>
+                  <span class="text-2xl text-yellow-300">
+                    <i class="fa-solid fa-carrot"></i>
+                  </span>
+                <% } %>
+              </div>
+              <span><%= ing.name %> (<%= ing.price %> แต้ม)</span>
+            </div>
           <% }); %>
         <% } %>
       </div>
@@ -64,26 +98,237 @@
         <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>"><i class="fa-solid fa-user"></i> <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
       <% }); %>
     </ul>
-    <!-- ส่วนซื้อวัตถุดิบและสุ่มอาหาร -->
     <div id="ingredient-shop" class="mt-8">
       <h3 class="text-lg font-semibold mb-2">ร้านขายวัตถุดิบ</h3>
       <div class="mb-2">แต้มของคุณ: <span id="my-points">0</span></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
-        <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients)) { %>
-          <% ingredients.forEach(function(ing) { %>
-            <button class="ingredient-btn bg-yellow-100 hover:bg-yellow-200 rounded-xl px-4 py-2 font-bold" data-ingredient="<%= ing.name %>"><%= ing.name %> (<%= ing.price %> แต้ม)</button>
-          <% }); %>
-        <% } else { %>
-          <button disabled class="bg-gray-200 rounded-xl px-4 py-2 font-bold">ไม่มีข้อมูลวัตถุดิบ</button>
-        <% } %>
+        <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients) && ingredients.length > 0) { %>
+          <% 
+            // Map ingredient name to image index (1-10.png)
+            const ingredientImgMap = {
+              'กะเพราะหมูสับ': 1,
+              'ข้าวผัดรถไฟ': 2,
+              'ส้มตำ': 3,
+              'ผัดเปรี้ยวหวาน': 4,
+              'แกงจืดหมูสับ': 5,
+              'หมูสับผัดไข่': 6,
+              'ไข่ตุ๋นกุ้ง': 7,
+              'น้ำพริกอ่องหมูสับ': 8,
+              'ยำกุ้งสุก': 9,
+              'ไข่เจียวทรงเครื่อง': 10
+            };
+          %><% ingredients.forEach(function(ing) { %>
+      <div class="flex flex-col items-center bg-yellow-50 rounded-xl p-2 shadow border border-yellow-100">
+        <div class="w-14 h-14 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
+          <% const imgIndex = ingredientImgMap[ing.name] || ingredientImgMap[ing.name.trim()]; %>
+          
+          <% if (imgIndex) { %>
+            <img src="/img/<%= imgIndex %>.png" 
+                 alt="<%= ing.name %>" 
+                 class="object-cover w-full h-full" 
+                 loading="lazy"
+                 onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+            
+            <!-- Fallback icon if image fails -->
+            <div style="display:none;" class="flex items-center justify-center">
+              <i class="fa-solid fa-utensils text-yellow-400 text-lg"></i>
+            </div>
+          <% } else { %>
+            <!-- No image mapping found -->
+            <span class="text-2xl text-yellow-300">
+              <i class="fa-solid fa-carrot"></i>
+            </span>
+          <% } %>
+        </div>
+        
+        <button class="ingredient-btn bg-yellow-100 hover:bg-yellow-200 rounded-xl px-2 py-1 font-bold mt-1 w-full transition-colors duration-200" 
+                data-ingredient="<%= ing.name %>">
+          <%= ing.name %> (<%= ing.price %> แต้ม)
+        </button>
       </div>
-      <div class="mb-2">วัตถุดิบของคุณ: <span id="my-ingredients"></span></div>
-      <button id="random-food-btn" class="bg-gradient-to-r from-green-400 to-blue-400 text-white font-bold px-6 py-2 rounded-xl mt-2">สุ่มอาหารจากวัตถุดิบของฉัน</button>
-      <div class="mt-2">อาหารที่คุณได้รับ: <span id="my-food" class="font-bold text-purple-700"></span></div>
+    <% }); %>
+    
+  <% } else { %>
+    <div class="col-span-full text-center p-8 bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center">
+      <i class="fa-solid fa-shopping-basket text-gray-400 text-4xl mb-4"></i>
+      <p class="text-gray-600 font-semibold">ไม่มีรายการวัตถุดิบ</p>
+      <p class="text-gray-500 text-sm mt-2">กรุณาเพิ่มวัตถุดิบในระบบ</p>
+      <% /* Show unique ingredient tags from mealIngredients even if shop is empty */ %>
+      <% if (typeof mealIngredientRows !== 'undefined' && Array.isArray(mealIngredientRows) && mealIngredientRows.length > 0) { %>
+        <% 
+          // mealIngredientRows: array of { ingredient: 'xxx', ... }
+          let uniqueIngredients = [];
+          mealIngredientRows.forEach(function(row) {
+            let trimmed = row.ingredient && row.ingredient.trim();
+            if (trimmed && !uniqueIngredients.includes(trimmed)) {
+              uniqueIngredients.push(trimmed);
+            }
+          });
+          // image mapping
+          const ingredientImgMap = {
+            'กะเพราะหมูสับ': 1,
+            'ข้าวผัดรถไฟ': 2,
+            'ส้มตำ': 3,
+            'ผัดเปรี้ยวหวาน': 4,
+            'แกงจืดหมูสับ': 5,
+            'หมูสับผัดไข่': 6,
+            'ไข่ตุ๋นกุ้ง': 7,
+            'น้ำพริกอ่องหมูสับ': 8,
+            'ยำกุ้งสุก': 9,
+            'ไข่เจียวทรงเครื่อง': 10
+          };
+        %>
+        <div class="mt-4">
+          <h4 class="text-md font-bold mb-1 text-blue-700">วัตถุดิบที่ใช้ในสูตรอาหารทั้งหมด</h4>
+          <div class="flex flex-wrap gap-2 justify-center">
+            <% uniqueIngredients.forEach(function(name) { %>
+              <span class="inline-flex items-center bg-blue-100 text-blue-800 rounded-full px-2 py-1 text-sm font-semibold gap-2">
+                <span class="w-7 h-7 bg-white rounded-full flex items-center justify-center overflow-hidden border border-blue-200 mr-1">
+                  <% const imgIndex = ingredientImgMap[name] || ingredientImgMap[name.trim()]; %>
+                  <% if (imgIndex) { %>
+                    <img src="/img/<%= imgIndex %>.png" alt="<%= name %>" class="object-cover w-full h-full" loading="lazy"
+                      onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                    <span style="display:none;" class="flex items-center justify-center"><i class="fa-solid fa-utensils text-blue-400 text-base"></i></span>
+                  <% } else { %>
+                    <span class="text-base text-blue-300"><i class="fa-solid fa-carrot"></i></span>
+                  <% } %>
+                </span>
+                <%= name %>
+              </span>
+            <% }); %>
+          </div>
+        </div>
+      <% } %>
     </div>
+  <% } %>
+</div>
+
+<div class="mb-4">
+  <h4 class="text-md font-bold mb-1 text-green-700">สูตรอาหารที่สามารถทำได้</h4>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <% if (typeof mealIngredients !== 'undefined' && Array.isArray(mealIngredients) && mealIngredients.length > 0) { %>
+      <% 
+        // Map meal name to image index - ใช้รูปเดียวกับวัตถุดิบหลัก
+        const mealImgMap = {
+          'กะเพราะหมูสับ': 1,
+          'ข้าวผัดรถไฟ': 2,
+          'ส้มตำ': 3,
+          'ผัดเปรี้ยวหวาน': 4,
+          'แกงจืดหมูสับ': 5,
+          'หมูสับผัดไข่': 6,
+          'ไข่ตุ๋นกุ้ง': 7,
+          'น้ำพริกอ่องหมูสับ': 8,
+          'ยำกุ้งสุก': 9,
+          'ไข่เจียวทรงเครื่อง': 10,
+        };
+      %>
+      
+      <% mealIngredients.forEach(function(meal) { %>
+        <div class="bg-green-50 rounded-xl p-4 flex flex-col items-center shadow border border-green-100 hover:bg-green-100 transition-colors duration-200">
+          <div class="w-20 h-20 bg-white rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-green-200">
+            <% 
+              // ลองหารูปจากชื่ออาหารโดยตรง หรือจากคำในชื่ออาหาร
+              let mealImgIndex = mealImgMap[meal.meal_name] || mealImgMap[meal.meal_name.trim()];
+              
+              // ถ้าไม่เจอ ลองหาจากคำในชื่ออาหาร
+              if (!mealImgIndex) {
+                Object.keys(mealImgMap).forEach(key => {
+                  if (meal.meal_name.includes(key) || key.includes(meal.meal_name)) {
+                    mealImgIndex = mealImgMap[key];
+                  }
+                });
+              }
+              
+              // ถ้ายังไม่เจอ ลองดูจากวัตถุดิบหลัก
+              if (!mealImgIndex && meal.ingredients) {
+                Object.keys(mealImgMap).forEach(key => {
+                  if (meal.ingredients.includes(key)) {
+                    mealImgIndex = mealImgMap[key];
+                  }
+                });
+              }
+            %>
+            
+            <% if (mealImgIndex) { %>
+              <img src="/img/<%= mealImgIndex %>.png" 
+                   alt="<%= meal.meal_name %>" 
+                   class="object-cover w-full h-full" 
+                   loading="lazy"
+                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              
+              <!-- Fallback icon if image fails -->
+              <div style="display:none;" class="flex items-center justify-center">
+                <i class="fa-solid fa-utensils text-green-400 text-2xl"></i>
+              </div>
+            <% } else { %>
+              <!-- No image mapping found - show default icon -->
+              <span class="text-4xl text-green-300">
+                <i class="fa-solid fa-utensils"></i>
+              </span>
+            <% } %>
+          </div>
+          
+          <div class="font-bold text-green-800 text-center mb-1"><%= meal.meal_name %></div>
+          <div class="text-gray-700 text-xs text-center mb-2">วัตถุดิบ: <%= meal.ingredients %></div>
+          
+          <!-- เพิ่มปุ่มสำหรับทำอาหาร -->
+          <button class="cook-meal-btn bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-1 text-xs font-semibold transition-colors duration-200" 
+                  data-meal="<%= meal.meal_name %>" 
+                  data-ingredients="<%= meal.ingredients %>">
+            <i class="fa-solid fa-fire mr-1"></i>ทำอาหาร
+          </button>
+        </div>
+      <% }); %>
+      
+    <% } else { %>
+          <button disabled class="bg-gray-200 rounded-xl px-4 py-2 font-bold">ไม่มีข้อมูลวัตถุดิบ</button>
+      </div>
+    <% } %>
+      <div class="mt-8 flex flex-col items-center">
+        <button id="random-food-btn" class="bg-gradient-to-r from-green-400 to-blue-400 text-white font-bold px-8 py-4 rounded-2xl w-full max-w-md text-lg shadow-lg transition-all duration-200 mb-4">สุ่มอาหารจากวัตถุดิบของฉัน</button>
+        <div class="w-full max-w-md flex flex-col gap-2 items-start">
+          <div class="mb-1 text-base font-semibold">วัตถุดิบของคุณ: <span id="my-ingredients"></span></div>
+          <div class="mb-1 text-base font-semibold">อาหารที่คุณได้รับ: <span id="my-food" class="font-bold text-purple-700"></span></div>
+        </div>
+      </div>
   </div>
 </div>
+</div>
 <script src="/socket.io/socket.io.js"></script>
+<script>
+  // JavaScript สำหรับจัดการปุ่มทำอาหาร
+  document.addEventListener('DOMContentLoaded', function() {
+    // จัดการปุ่มวัตถุดิบ
+    document.querySelectorAll('.ingredient-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const ingredient = this.dataset.ingredient;
+        console.log('Selected ingredient:', ingredient);
+        // เพิ่มฟังก์ชันการทำงานตามต้องการ
+      });
+    });
+    
+    // จัดการปุ่มทำอาหาร
+    document.querySelectorAll('.cook-meal-btn').forEach(btn => {
+      btn.addEventListener('click', function() {
+        const meal = this.dataset.meal;
+        const ingredients = this.dataset.ingredients;
+        console.log('Cooking meal:', meal, 'with ingredients:', ingredients);
+        
+        // เพิ่มเอฟเฟกต์การทำอาหาร
+        this.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>กำลังทำ...';
+        this.disabled = true;
+        
+        setTimeout(() => {
+          this.innerHTML = '<i class="fa-solid fa-check mr-1"></i>ทำเสร็จแล้ว!';
+          setTimeout(() => {
+            this.innerHTML = '<i class="fa-solid fa-fire mr-1"></i>ทำอาหาร';
+            this.disabled = false;
+          }, 2000);
+        }, 3000);
+      });
+    });
+  });
+</script>
 <script>
   const socket = io();
   let currentQuestion = 0;

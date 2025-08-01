@@ -166,16 +166,21 @@ exports.gameRoomPage = (req, res) => {
         // ดึงคำถามทั้งหมดของห้องนี้
         usersDB.all('SELECT * FROM questions WHERE room_id = ?', [roomId], (err3, questions) => {
           if (err3) questions = [];
-          // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient (หรือ meal_ingredient ถ้ามี)
+          // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient
           usersDB.all('SELECT name, price FROM ingredient', [], (err4, ingredients) => {
             if (err4) ingredients = [];
-            res.render('game-room', {
-              layout: 'layouts/main',
-              user: req.user,
-              room,
-              players,
-              questions,
-              ingredients
+            // ดึงสูตรอาหารและวัตถุดิบที่สัมพันธ์กัน
+            usersDB.all('SELECT meal.name as meal_name, GROUP_CONCAT(meal_ingredient.ingredient) as ingredients FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err5, mealIngredients) => {
+              if (err5) mealIngredients = [];
+              res.render('game-room', {
+                layout: 'layouts/main',
+                user: req.user,
+                room,
+                players,
+                questions,
+                ingredients,
+                mealIngredients
+              });
             });
           });
         });

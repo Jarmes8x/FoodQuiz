@@ -385,17 +385,39 @@ body {
     margin-right: auto;
 }
 
-/* icon-fall */
-
-/* .icon-fall {
-    position: fixed;
-    top: -50px;      
-    width: 32px;
-    height: 32px;
-    pointer-events: none;
-    user-select: none;
-    transition: top linear;
-} */
+  /* เพิ่ม animation เมื่อ hover */
+  .cook-meal-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .ingredient-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Animation สำหรับรูปที่โหลด */
+  img {
+    transition: opacity 0.3s ease, transform 0.2s ease;
+  }
+  
+  img:hover {
+    transform: scale(1.05);
+  }
+  
+  /* Loading placeholder */
+  img[loading="lazy"]:not([src]) {
+    background: linear-gradient(45deg, #f0f0f0 25%, transparent 25%), 
+                linear-gradient(-45deg, #f0f0f0 25%, transparent 25%);
+    background-size: 10px 10px;
+    background-position: 0 0, 5px 5px;
+    animation: loading-animation 1s infinite;
+  }
+  
+  @keyframes loading-animation {
+    0% { background-position: 0 0, 5px 5px; }
+    100% { background-position: 10px 10px, 15px 15px; }
+  }
 
 
 /* Responsive Design */
