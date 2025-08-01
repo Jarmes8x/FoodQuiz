@@ -32,7 +32,6 @@ exports.loginPost = async (req, res) => {
   }
 
   try {
-    // Insert or ignore user
     await new Promise((resolve, reject) => {
       usersDB.run('INSERT OR IGNORE INTO users (name) VALUES (?)', [name.trim()], function (err) {
         if (err) return reject(err);

@@ -33,7 +33,7 @@
       <h3 class="text-lg font-semibold mb-2">ผู้เล่นในห้อง (<span id="player-count"><%= players.length %></span>/<%= room.max_players %>)</h3>
       <ul id="player-list">
         <% players.forEach(function(player) { %>
-          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>" id="player-li-<%= player.id %>">👤 <span class="player-name"><%= player.name %></span> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
+          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>" id="player-li-<%= player.id %>"><i class="fa-solid fa-user"></i> <span class="player-name"><%= player.name %></span> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
         <% }); %>
       </ul>
     </div>
@@ -61,7 +61,7 @@
     <h3 class="text-lg font-semibold mb-2">คะแนน</h3>
     <ul id="score-list">
       <% players.forEach(function(player) { %>
-        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>">👤 <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
+        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>"><i class="fa-solid fa-user"></i> <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
       <% }); %>
     </ul>
     <!-- ส่วนซื้อวัตถุดิบและสุ่มอาหาร -->
@@ -96,8 +96,18 @@
 
   // --- Room deleted event ---
   socket.on('room_deleted', function(data) {
-    alert(data && data.message ? data.message : 'ห้องนี้ถูกลบแล้ว');
-    window.location.href = '/';
+    showNotification('ห้องนี้ถูกลบแล้ว', 'info');
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 2000);
+  });
+
+  // เมื่อห้องเต็ม
+  socket.on('room_full', function(data) {
+    showNotification('ห้องเต็มแล้ว', 'info');
+    setTimeout(() => {
+      window.location.href = '/';
+    }, 2000);
   });
 
 
@@ -204,23 +214,62 @@
   });
 
   // Join room
+  console.log('Joining room:', { roomId, user });
   socket.emit('join_room', roomId, user);
 
-  // Update player list real-time
+  // อัปเดตรายชื่อผู้เล่นเมื่อเข้าห้องครั้งแรก
+  socket.on('player_list_updated', data => {
+    console.log('Received player_list_updated:', data);
+    if (data && data.roomId == roomId && data.players) {
+      console.log('Updating player list:', data.players);
+      updatePlayerList(data.players);
+    } else {
+      console.log('Invalid player_list_updated data:', data);
+    }
+  });
+
+  // ฟังก์ชันอัปเดตรายชื่อผู้เล่น
+  function updatePlayerList(players) {
+    console.log('updatePlayerList called with:', players);
+    if (!Array.isArray(players)) {
+      console.error('Players is not an array:', players);
+      return;
+    }
+    
+    const list = document.getElementById('player-list');
+    const scoreList = document.getElementById('score-list');
+    
+    if (!list || !scoreList) {
+      console.error('Required DOM elements not found');
+      return;
+    }
+    
+    list.innerHTML = '';
+    scoreList.innerHTML = '';
+    
+    players.forEach(player => {
+      if (player && player.id && player.name !== undefined) {
+        list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score || 0}</span></li>`;
+        scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold">+<span id="score-${player.id}">${player.score || 0}</span></span></li>`;
+      } else {
+        console.warn('Invalid player data:', player);
+      }
+    });
+    
+    const playerCountElement = document.getElementById('player-count');
+    if (playerCountElement) {
+      playerCountElement.textContent = players.length;
+    }
+  }
+
+  // Update player list real-time เมื่อมีคนเข้าร่วม
   socket.on('user_joined', data => {
-    fetch(`/api/room-players/${roomId}`)
-      .then(res => res.json())
-      .then(players => {
-        const list = document.getElementById('player-list');
-        const scoreList = document.getElementById('score-list');
-        list.innerHTML = '';
-        scoreList.innerHTML = '';
-        players.forEach(player => {
-          list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}">👤 <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score}</span></li>`;
-          scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}">👤 ${player.name} <span class="ml-2 text-green-600 font-bold">+<span id="score-${player.id}">${player.score}</span></span></li>`;
-        });
-        document.getElementById('player-count').textContent = players.length;
-      });
+    console.log('User joined event received:', data);
+  });
+
+  // Update player list real-time เมื่อมีคนออก
+  socket.on('user_left', data => {
+    console.log('User left event received:', data);
   });
 
   // ฟัง event update_room_player_count เพื่ออัปเดตจำนวนผู้เล่นแบบ real-time
@@ -228,6 +277,18 @@
     if (data && data.roomId == roomId) {
       document.getElementById('player-count').textContent = data.count;
     }
+  });
+
+
+
+  // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ
+  window.addEventListener('beforeunload', () => {
+    socket.emit('leave_room', roomId, user);
+  });
+
+  // จัดการเมื่อผู้ใช้กดปุ่มย้อนกลับ
+  window.addEventListener('popstate', () => {
+    socket.emit('leave_room', roomId, user);
   });
 
 
