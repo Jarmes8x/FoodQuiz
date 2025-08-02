@@ -33,23 +33,20 @@ exports.loginPost = async (req, res) => {
 
   try {
     await new Promise((resolve, reject) => {
-      usersDB.run('INSERT OR IGNORE INTO users (name) VALUES (?)', [name.trim()], function (err) {
-        if (err) return reject(err);
-        resolve(this.lastID);
+      usersDB.serialize(() => {
+        usersDB.run('INSERT OR IGNORE INTO users (name) VALUES (?)', [name.trim()], function (err) {
+          if (err) return reject(err);
+          usersDB.get('SELECT id, name FROM users WHERE name = ?', [name.trim()], (err2, row) => {
+            if (err2 || !row) return reject(err2 || new Error('User not found'));
+            const token = jwt.sign(row, jwtSecret, { expiresIn: '7d' });
+            res.cookie('token', token, { httpOnly: true });
+            resolve();
+          });
+        });
       });
     });
-
-    // Get user id
-    const user = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT id, name FROM users WHERE name = ?', [name.trim()], (err, row) => {
-        if (err || !row) return reject(err || new Error('User not found'));
-        resolve(row);
-      });
-    });
-
-    const token = jwt.sign(user, jwtSecret, { expiresIn: '7d' });
-    res.cookie('token', token, { httpOnly: true });
-    return res.redirect('/');
+    // Ensure redirect only after DB operations complete
+    return;
   } catch (err) {
     console.error('LoginPost error:', err);
     return res.status(500).render('login', { ...locals, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });
