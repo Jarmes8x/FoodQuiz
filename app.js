@@ -5,6 +5,9 @@ setTimeout(() => {
   usersDB.run('ALTER TABLE room_players ADD COLUMN food TEXT', () => {});
 }, 100);
 
+// เพิ่มข้อมูลตัวอย่างในฐานข้อมูล
+require('./src/database/seedData');
+
 const express = require('express');
 const path = require('path');
 const expressLayouts = require("express-ejs-layouts");

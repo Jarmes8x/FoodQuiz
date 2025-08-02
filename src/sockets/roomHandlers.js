@@ -1,4 +1,5 @@
 const usersDB = require('../database/dbConfig');
+const { assignRandomFoodsToPlayer } = require('./foodHandlers');
 
 const roomAnswers = {};
 
@@ -89,6 +90,16 @@ const setupRoomHandlers = (io, socket) => {
       socket.join(`room_${roomId}`);
 
       const isNewPlayer = await addPlayerToRoom(roomId, user);
+
+      // สุ่มอาหารให้ผู้เล่นเมื่อเข้าห้อง
+      if (isNewPlayer) {
+        try {
+          const foods = await assignRandomFoodsToPlayer(roomId, user.id);
+          console.log(`Assigned foods to new player ${user.name} in room ${roomId}:`, foods);
+        } catch (foodError) {
+          console.error('Error assigning foods to new player:', foodError);
+        }
+      }
 
       io.to(`room_${roomId}`).emit('user_joined', { user, socketId: socket.id });
 

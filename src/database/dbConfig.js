@@ -85,6 +85,67 @@ usersDB.serialize(() => {
       console.error("Error creating room_players table:", err.message);
     }
   });
+
+  // Table: player_foods (ตารางใหม่สำหรับเก็บอาหารที่สุ่มได้)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS player_foods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      food_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating player_foods table:", err.message);
+    }
+  });
+
+  // Table: ingredients (ตารางสำหรับวัตถุดิบ)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS ingredient (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      price INTEGER DEFAULT 0,
+      image_file TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating ingredient table:", err.message);
+    }
+  });
+
+  // Table: meals (ตารางสำหรับสูตรอาหาร)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS meal (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating meal table:", err.message);
+    }
+  });
+
+  // Table: meal_ingredients (ตารางสำหรับความสัมพันธ์ระหว่างอาหารและวัตถุดิบ)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS meal_ingredient (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      meal_id INTEGER NOT NULL,
+      ingredient TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meal_id) REFERENCES meal(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating meal_ingredient table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close

@@ -23,12 +23,19 @@ const buyIngredient = async (roomId, userId, ingredient) => {
       ingredients = []; 
     }
 
-    // ราคาวัตถุดิบ
-    const prices = { 
-      'ไข่': 5, 'ข้าว': 5, 'หมู': 8, 'ผัก': 4, 
-      'ไก่': 8, 'ปลา': 10, 'กุ้ง': 12, 'เต้าหู้': 6 
-    };
-    const price = prices[ingredient] || 0;
+    // ดึงราคาวัตถุดิบจากฐานข้อมูล
+    const ingredientData = await new Promise((resolve, reject) => {
+      usersDB.get('SELECT price FROM ingredient WHERE name = ?', [ingredient], (err, row) => {
+        if (err) reject(err);
+        else resolve(row);
+      });
+    });
+
+    if (!ingredientData) {
+      throw new Error('Ingredient not found');
+    }
+
+    const price = ingredientData.price;
 
     if (points < price) {
       throw new Error('Not enough points');

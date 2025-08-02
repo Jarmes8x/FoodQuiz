@@ -167,19 +167,40 @@ exports.gameRoomPage = (req, res) => {
         usersDB.all('SELECT * FROM questions WHERE room_id = ?', [roomId], (err3, questions) => {
           if (err3) questions = [];
           // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient
-          usersDB.all('SELECT name, price FROM ingredient', [], (err4, ingredients) => {
+          usersDB.all('SELECT name, price, image_file FROM ingredient', [], (err4, ingredients) => {
             if (err4) ingredients = [];
             // ดึงสูตรอาหารและวัตถุดิบที่สัมพันธ์กัน
             usersDB.all('SELECT meal.name as meal_name, GROUP_CONCAT(meal_ingredient.ingredient) as ingredients FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err5, mealIngredients) => {
               if (err5) mealIngredients = [];
-              res.render('game-room', {
-                layout: 'layouts/main',
-                user: req.user,
-                room,
-                players,
-                questions,
-                ingredients,
-                mealIngredients
+              // ดึงอาหารที่สุ่มได้ของผู้เล่นในห้องนี้
+              usersDB.all(`
+                SELECT 
+                  pf.user_id,
+                  u.name as user_name,
+                  GROUP_CONCAT(pf.food_name) as foods
+                FROM player_foods pf
+                JOIN users u ON pf.user_id = u.id
+                WHERE pf.room_id = ?
+                GROUP BY pf.user_id
+              `, [roomId], (err6, playerFoods) => {
+                if (err6) playerFoods = [];
+                
+                // แปลงข้อมูลให้อยู่ในรูปแบบที่ใช้งานง่าย
+                const playerFoodsMap = {};
+                playerFoods.forEach(pf => {
+                  playerFoodsMap[pf.user_id] = pf.foods ? pf.foods.split(',') : [];
+                });
+                
+                res.render('game-room', {
+                  layout: 'layouts/main',
+                  user: req.user,
+                  room,
+                  players,
+                  questions,
+                  ingredients,
+                  mealIngredients,
+                  playerFoods: playerFoodsMap
+                });
               });
             });
           });

@@ -3,6 +3,7 @@
   const isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
   let questions = <%- JSON.stringify(questions) %>;
   const roomId = "<%= room.id %>";
+  const playerFoods = <%- JSON.stringify(playerFoods || {}) %>;
 </script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
@@ -20,27 +21,11 @@
       <h3 class="text-xl font-bold mb-4 text-yellow-700">วัตถุดิบทั้งหมดในเกม</h3>
       <div id="ingredient-modal-content" class="mb-4 grid grid-cols-2 md:grid-cols-3 gap-2">
         <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients)) { %>
-          <% 
-            // Map ingredient name to image index (1-10.png)
-            const ingredientImgMap = {
-              'กะเพราะหมูสับ': 1,
-              'ข้าวผัดรถไฟ': 2,
-              'ส้มตำ': 3,
-              'ผัดเปรี้ยวหวาน': 4,
-              'แกงจืดหมูสับ': 5,
-              'หมูสับผัดไข่': 6,
-              'ไข่ตุ๋นกุ้ง': 7,
-              'น้ำพริกอ่องหมูสับ': 8,
-              'ยำกุ้งสุก': 9,
-              'ไข่เจียวทรงเครื่อง': 10
-            };
-          %>
           <% ingredients.forEach(function(ing) { %>
             <div class="flex flex-col items-center bg-yellow-100 rounded-xl px-4 py-2 font-bold">
               <div class="w-12 h-12 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
-                <% const imgIndex = ingredientImgMap[ing.name] || ingredientImgMap[ing.name.trim()]; %>
-                <% if (imgIndex) { %>
-                  <img src="/img/<%= imgIndex %>.png" 
+                <% if (ing.image_file) { %>
+                  <img src="/img/<%= ing.image_file %>" 
                       alt="<%= ing.name %>" 
                       class="object-cover w-full h-full" 
                       loading="lazy"
@@ -67,7 +52,17 @@
       <h3 class="text-lg font-semibold mb-2">ผู้เล่นในห้อง (<span id="player-count"><%= players.length %></span>/<%= room.max_players %>)</h3>
       <ul id="player-list">
         <% players.forEach(function(player) { %>
-          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>" id="player-li-<%= player.id %>"><i class="fa-solid fa-user"></i> <span class="player-name"><%= player.name %></span> <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span></li>
+          <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>" id="player-li-<%= player.id %>">
+            <i class="fa-solid fa-user"></i> <span class="player-name"><%= player.name %></span> 
+            <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> 
+            <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span>
+            <% if (playerFoods[player.id] && playerFoods[player.id].length > 0) { %>
+              <div class="mt-1 text-xs text-blue-600">
+                <i class="fa-solid fa-utensils mr-1"></i>
+                <%= playerFoods[player.id].join(', ') %>
+              </div>
+            <% } %>
+          </li>
         <% }); %>
       </ul>
     </div>
@@ -78,13 +73,6 @@
           <span id="waiting-message">รอเจ้าของห้องเริ่มเกม...</span>
         </div>
       </div>
-      <% if (user.id === room.creator_id) { %>
-        <form action="/room/<%= room.id %>?_method=DELETE" method="POST" onsubmit="return confirm('คุณต้องการลบห้องนี้จริงหรือไม่?');" class="mt-4 w-full flex justify-center">
-          <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold px-8 py-3 rounded-2xl text-lg w-full flex items-center justify-center gap-2">
-            <i class="fa-solid fa-trash"></i> ลบห้อง
-          </button>
-        </form>
-      <% } %>
       <% if (user.id === room.creator_id) { %>
         <button id="start-btn" class="mt-4 bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">เริ่มเกม</button>
         <button id="next-btn" class="mt-4 bg-gradient-to-r from-[#ff8c42] to-[#ff6a6a] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">ข้อถัดไป</button>
@@ -103,27 +91,11 @@
       <div class="mb-2">แต้มของคุณ: <span id="my-points">0</span></div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
         <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients) && ingredients.length > 0) { %>
-          <% 
-            // Map ingredient name to image index (1-10.png)
-            const ingredientImgMap = {
-              'กะเพราะหมูสับ': 1,
-              'ข้าวผัดรถไฟ': 2,
-              'ส้มตำ': 3,
-              'ผัดเปรี้ยวหวาน': 4,
-              'แกงจืดหมูสับ': 5,
-              'หมูสับผัดไข่': 6,
-              'ไข่ตุ๋นกุ้ง': 7,
-              'น้ำพริกอ่องหมูสับ': 8,
-              'ยำกุ้งสุก': 9,
-              'ไข่เจียวทรงเครื่อง': 10
-            };
-          %><% ingredients.forEach(function(ing) { %>
+          <% ingredients.forEach(function(ing) { %>
       <div class="flex flex-col items-center bg-yellow-50 rounded-xl p-2 shadow border border-yellow-100">
         <div class="w-14 h-14 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
-          <% const imgIndex = ingredientImgMap[ing.name] || ingredientImgMap[ing.name.trim()]; %>
-          
-          <% if (imgIndex) { %>
-            <img src="/img/<%= imgIndex %>.png" 
+          <% if (ing.image_file) { %>
+            <img src="/img/<%= ing.image_file %>" 
                  alt="<%= ing.name %>" 
                  class="object-cover w-full h-full" 
                  loading="lazy"
@@ -164,19 +136,8 @@
               uniqueIngredients.push(trimmed);
             }
           });
-          // image mapping
-          const ingredientImgMap = {
-            'กะเพราะหมูสับ': 1,
-            'ข้าวผัดรถไฟ': 2,
-            'ส้มตำ': 3,
-            'ผัดเปรี้ยวหวาน': 4,
-            'แกงจืดหมูสับ': 5,
-            'หมูสับผัดไข่': 6,
-            'ไข่ตุ๋นกุ้ง': 7,
-            'น้ำพริกอ่องหมูสับ': 8,
-            'ยำกุ้งสุก': 9,
-            'ไข่เจียวทรงเครื่อง': 10
-          };
+          // ใช้ชื่อไฟล์จากฐานข้อมูลแทน
+          const ingredientImgMap = {};
         %>
         <div class="mt-4">
           <h4 class="text-md font-bold mb-1 text-blue-700">วัตถุดิบที่ใช้ในสูตรอาหารทั้งหมด</h4>
@@ -289,6 +250,26 @@
         <div class="w-full max-w-md flex flex-col gap-2 items-start">
           <div class="mb-1 text-base font-semibold">วัตถุดิบของคุณ: <span id="my-ingredients"></span></div>
           <div class="mb-1 text-base font-semibold">อาหารที่คุณได้รับ: <span id="my-food" class="font-bold text-purple-700"></span></div>
+        </div>
+        
+        <!-- แสดงอาหารที่สุ่มได้เมื่อเข้าห้อง -->
+        <div class="mt-6 w-full max-w-md">
+          <h4 class="text-lg font-bold mb-3 text-center text-purple-700">อาหารที่คุณได้รับเมื่อเข้าห้อง</h4>
+          <div id="my-assigned-foods" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <% if (playerFoods[user.id] && playerFoods[user.id].length > 0) { %>
+              <% playerFoods[user.id].forEach(function(food) { %>
+                <div class="bg-purple-100 rounded-xl p-3 text-center border border-purple-200">
+                  <i class="fa-solid fa-utensils text-purple-600 text-xl mb-2"></i>
+                  <div class="font-semibold text-purple-800"><%= food %></div>
+                </div>
+              <% }); %>
+            <% } else { %>
+              <div class="col-span-full text-center text-gray-500 py-4">
+                <i class="fa-solid fa-clock text-2xl mb-2"></i>
+                <div>กำลังสุ่มอาหาร...</div>
+              </div>
+            <% } %>
+          </div>
         </div>
       </div>
   </div>
@@ -418,6 +399,36 @@
       updateMyShopUI();
     }
   });
+
+  // รับ event อาหารที่สุ่มได้เมื่อเข้าห้อง
+  socket.on('foods_assigned', data => {
+    if (data.userId === user.id) {
+      console.log('Received assigned foods:', data.foods);
+      updateAssignedFoodsUI(data.foods);
+    }
+  });
+
+  // ฟังก์ชันอัปเดต UI แสดงอาหารที่สุ่มได้
+  function updateAssignedFoodsUI(foods) {
+    const container = document.getElementById('my-assigned-foods');
+    if (!container) return;
+
+    if (foods && foods.length > 0) {
+      container.innerHTML = foods.map(food => `
+        <div class="bg-purple-100 rounded-xl p-3 text-center border border-purple-200">
+          <i class="fa-solid fa-utensils text-purple-600 text-xl mb-2"></i>
+          <div class="font-semibold text-purple-800">${food}</div>
+        </div>
+      `).join('');
+    } else {
+      container.innerHTML = `
+        <div class="col-span-full text-center text-gray-500 py-4">
+          <i class="fa-solid fa-exclamation-triangle text-2xl mb-2"></i>
+          <div>ไม่ได้รับอาหาร</div>
+        </div>
+      `;
+    }
+  }
 
   // ฟังก์ชันเปิดใช้งาน shop หลังเริ่มเกมเท่านั้น
   function enableIngredientShop() {
