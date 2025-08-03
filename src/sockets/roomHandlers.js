@@ -143,11 +143,38 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
-  // เมื่อเริ่มเกม
+  // เมื่อเริ่มเกม (หลังจากเลือกคำถามแล้ว)
   socket.on('start_game', async (roomId, ownerId) => {
     try {
+      // ตรวจสอบว่าเป็นเจ้าของห้องหรือไม่
+      const room = await new Promise((resolve, reject) => {
+        usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+
+      if (!room || room.creator_id !== ownerId) {
+        socket.emit('game_error', { message: 'ไม่มีสิทธิ์เริ่มเกม' });
+        return;
+      }
+
+      // แจ้งทุกคนในห้องว่าเกมเริ่มแล้ว
+      io.to(`room_${roomId}`).emit('game_started');
+
+    } catch (error) {
+      console.error('Error in start_game:', error);
+      io.to(`room_${roomId}`).emit('game_error', { message: 'เกิดข้อผิดพลาดในการเริ่มเกม' });
+    }
+  });
+
+  // เมื่อเลือกคำถาม
+  socket.on('questions_selected', async (roomId, selectedQuestionIds) => {
+    try {
+      // ดึงคำถามจากฐานข้อมูลตาม ID ที่เลือก
+      const placeholders = selectedQuestionIds.map(() => '?').join(',');
       const questions = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT * FROM questions', [], (err, rows) => {
+        usersDB.all(`SELECT * FROM questions WHERE rowid IN (${placeholders})`, selectedQuestionIds, (err, rows) => {
           if (err) reject(err);
           else resolve(rows || []);
         });
@@ -158,28 +185,8 @@ const setupRoomHandlers = (io, socket) => {
         return;
       }
 
-      io.to(socket.id).emit('select_questions', questions);
-
-    } catch (error) {
-      console.error('Error in start_game:', error);
-      io.to(`room_${roomId}`).emit('game_error', { message: 'เกิดข้อผิดพลาดในการเริ่มเกม' });
-    }
-  });
-
-  // เมื่อเลือกคำถาม
-  socket.on('questions_selected', async (roomId, selectedQuestions) => {
-    try {
-      const shuffleArray = (array) => {
-        let arr = array.slice();
-        for (let i = arr.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-        return arr;
-      };
-
-      const shuffled = shuffleArray(selectedQuestions);
-      io.to(`room_${roomId}`).emit('game_questions', shuffled);
+      // ส่งคำถามที่เลือกไปให้ทุกคนในห้อง
+      io.to(`room_${roomId}`).emit('game_questions', questions);
 
     } catch (error) {
       console.error('Error in questions_selected:', error);
@@ -199,22 +206,6 @@ const setupRoomHandlers = (io, socket) => {
         answerTime: data.answerTime
       });
 
-  // Owner requests questions (for modal selection)
-  socket.on('request_questions', async (roomId) => {
-    try {
-      const questions = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT * FROM questions', [], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
-        });
-      });
-      io.to(socket.id).emit('select_questions', questions);
-    } catch (error) {
-      console.error('Error in request_questions:', error);
-      io.to(socket.id).emit('game_error', { message: 'เกิดข้อผิดพลาดในการดึงคำถาม' });
-    }
-  });
-
       const scoreRow = await new Promise((resolve, reject) => {
         usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
           if (err) reject(err);
@@ -227,6 +218,74 @@ const setupRoomHandlers = (io, socket) => {
 
     } catch (error) {
       console.error('Error in submit_answer:', error);
+    }
+  });
+
+  // เมื่อคำถามจบแล้ว (หมดเวลาหรือทุกคนตอบแล้ว)
+  socket.on('question_ended', async (data) => {
+    try {
+      // ตรวจสอบว่าทุกคนในห้องตอบแล้วหรือยัง
+      const players = await new Promise((resolve, reject) => {
+        usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      });
+
+      const answers = roomAnswers[data.roomId] && roomAnswers[data.roomId][data.questionIndex] ? roomAnswers[data.roomId][data.questionIndex] : [];
+      const answeredUserIds = answers.map(a => a.userId);
+
+      // ถ้าทุกคนตอบแล้ว หรือมีคนส่ง event นี้มา ให้จบคำถาม
+      if (answeredUserIds.length >= players.length || answers.length > 0) {
+        // แจ้งทุกคนในห้องว่าคำถามจบแล้ว
+        io.to(`room_${data.roomId}`).emit('question_ended', { questionIndex: data.questionIndex });
+      }
+
+    } catch (error) {
+      console.error('Error in question_ended:', error);
+    }
+  });
+
+  // เมื่อผู้เล่นตอบคำถามแล้ว
+  socket.on('answer_submitted', async (data) => {
+    try {
+      // ตรวจสอบว่าทุกคนในห้องตอบแล้วหรือยัง
+      const players = await new Promise((resolve, reject) => {
+        usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      });
+
+      const answers = roomAnswers[data.roomId] && roomAnswers[data.roomId][data.questionIndex] ? roomAnswers[data.roomId][data.questionIndex] : [];
+      const answeredUserIds = answers.map(a => a.userId);
+
+      // ถ้าทุกคนตอบแล้ว ให้จบคำถาม
+      if (answeredUserIds.length >= players.length) {
+        // รอ 1 วินาทีแล้วจบคำถาม
+        setTimeout(() => {
+          io.to(`room_${data.roomId}`).emit('question_ended', { questionIndex: data.questionIndex });
+        }, 1000);
+      }
+
+    } catch (error) {
+      console.error('Error in answer_submitted:', error);
+    }
+  });
+
+  // Owner requests questions (for modal selection)
+  socket.on('request_questions', async (roomId) => {
+    try {
+      const questions = await new Promise((resolve, reject) => {
+        usersDB.all('SELECT rowid, * FROM questions', [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      });
+      io.to(socket.id).emit('select_questions', questions);
+    } catch (error) {
+      console.error('Error in request_questions:', error);
+      io.to(socket.id).emit('game_error', { message: 'เกิดข้อผิดพลาดในการดึงคำถาม' });
     }
   });
 
