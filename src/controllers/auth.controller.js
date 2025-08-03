@@ -45,8 +45,8 @@ exports.loginPost = async (req, res) => {
         });
       });
     });
-    // Ensure redirect only after DB operations complete
-    return;
+    // Redirect after DB operations complete
+    return res.redirect('/');
   } catch (err) {
     console.error('LoginPost error:', err);
     return res.status(500).render('login', { ...locals, error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง' });

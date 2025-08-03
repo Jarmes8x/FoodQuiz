@@ -199,6 +199,22 @@ const setupRoomHandlers = (io, socket) => {
         answerTime: data.answerTime
       });
 
+  // Owner requests questions (for modal selection)
+  socket.on('request_questions', async (roomId) => {
+    try {
+      const questions = await new Promise((resolve, reject) => {
+        usersDB.all('SELECT * FROM questions', [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      });
+      io.to(socket.id).emit('select_questions', questions);
+    } catch (error) {
+      console.error('Error in request_questions:', error);
+      io.to(socket.id).emit('game_error', { message: 'เกิดข้อผิดพลาดในการดึงคำถาม' });
+    }
+  });
+
       const scoreRow = await new Promise((resolve, reject) => {
         usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
           if (err) reject(err);
@@ -220,6 +236,46 @@ const setupRoomHandlers = (io, socket) => {
       const answers = (roomAnswers[roomId] && roomAnswers[roomId][questionIndex]) || [];
       const correct = answers.filter(a => a.answerIndex === correctIndex)
         .sort((a, b) => a.answerTime - b.answerTime);
+
+  // Owner deletes room
+  socket.on('delete_room', async (roomId, userId) => {
+    try {
+      // Check if user is owner
+      const room = await new Promise((resolve, reject) => {
+        usersDB.get('SELECT * FROM rooms WHERE id = ? AND creator_id = ?', [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+      if (!room) {
+        socket.emit('game_error', { message: 'ไม่มีสิทธิ์ลบห้องนี้' });
+        return;
+      }
+      // Delete room and related data
+      await new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      await new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM questions WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      await new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      io.to(`room_${roomId}`).emit('room_deleted', { roomId });
+    } catch (error) {
+      console.error('Error in delete_room:', error);
+      socket.emit('game_error', { message: 'เกิดข้อผิดพลาดในการลบห้อง' });
+    }
+  });
 
       for (let i = 0; i < correct.length; i++) {
         const addScore = Math.max(4 - i, 0);

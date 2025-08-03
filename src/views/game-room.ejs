@@ -552,7 +552,8 @@
   // Owner starts game
   if (isOwner) {
     document.getElementById('start-btn').onclick = () => {
-      socket.emit('start_game', roomId, user.id);
+      // Show question select modal
+      socket.emit('request_questions', roomId);
       document.getElementById('start-btn').classList.add('hidden');
     };
     document.getElementById('next-btn').onclick = () => {
@@ -560,6 +561,67 @@
     };
   }
 
+  // Owner receives questions to select
+  socket.on('select_questions', function(questions) {
+    let html = `<div id="question-select-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl p-8 max-w-2xl w-full">
+        <h3 class="text-xl font-bold mb-4">เลือกคำถามสำหรับเกมนี้ (เลือก 14 ข้อ)</h3>
+        <div id="question-select-alert" class="mb-2 text-red-600 font-semibold hidden">เลือกครบ 14 ข้อแล้ว</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto mb-4">
+          ${questions.map((q, i) => `
+            <label class="flex items-start gap-2">
+              <input type="checkbox" class="q-checkbox" value="${q.id}">
+              <span>${i+1}. ${q.question_text}</span>
+            </label>
+          `).join('')}
+        </div>
+        <button id="confirm-questions-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-2 rounded-xl">ยืนยัน</button>
+      </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', html);
+    // Alert when 14 selected
+    const checkboxes = document.querySelectorAll('.q-checkbox');
+    const alert14 = document.getElementById('question-select-alert');
+    checkboxes.forEach(cb => {
+      cb.addEventListener('change', () => {
+        const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
+        if (checkedCount === 14) {
+          alert14.classList.remove('hidden');
+        } else {
+          alert14.classList.add('hidden');
+        }
+      });
+    });
+    document.getElementById('confirm-questions-btn').onclick = () => {
+      const checked = Array.from(document.querySelectorAll('.q-checkbox:checked')).map(cb => parseInt(cb.value));
+      if (checked.length !== 14) {
+        alert('กรุณาเลือก 14 ข้อ');
+        return;
+      }
+      // Send selected question ids to backend
+      socket.emit('questions_selected', roomId, checked);
+      document.getElementById('question-select-modal').remove();
+      // Show 20s countdown before game starts
+      let countdown = 20;
+      let countdownModal = document.createElement('div');
+      countdownModal.id = 'countdown-modal';
+      countdownModal.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-50';
+      countdownModal.innerHTML = `<div class="bg-white rounded-2xl p-8 max-w-xs w-full text-center">
+        <h3 class="text-xl font-bold mb-4 text-purple-700">เกมจะเริ่มใน <span id='countdown-timer'>${countdown}</span> วินาที</h3>
+      </div>`;
+      document.body.appendChild(countdownModal);
+      let timer = setInterval(() => {
+        countdown--;
+        document.getElementById('countdown-timer').textContent = countdown;
+        if (countdown <= 0) {
+          clearInterval(timer);
+          document.getElementById('countdown-modal').remove();
+          // Notify backend to start game for all
+          socket.emit('start_game', roomId, user.id);
+        }
+      }, 1000);
+    };
+  });
   // รับ event select_questions (เฉพาะเจ้าของห้อง)
   socket.on('select_questions', function(questions) {
     // แสดง UI ให้เจ้าของห้องเลือกคำถาม (เลือก 14 ข้อ)
@@ -662,20 +724,7 @@
     if (deleteRoomBtn) {
       deleteRoomBtn.onclick = function() {
         if (confirm('คุณต้องการลบห้องนี้ใช่หรือไม่?')) {
-          fetch(`/delete-room/${roomId}`, {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' }
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data.success) {
-              alert('ลบห้องเรียบร้อยแล้ว');
-              window.location.href = '/dashboard';
-            } else {
-              alert(data.error || 'เกิดข้อผิดพลาดในการลบห้อง');
-            }
-          })
-          .catch(() => alert('เกิดข้อผิดพลาดในการลบห้อง'));
+          socket.emit('delete_room', roomId, user.id);
         }
       };
     }
