@@ -197,24 +197,33 @@ const setupRoomHandlers = (io, socket) => {
   // เมื่อส่งคำตอบ
   socket.on('submit_answer', async (data) => {
     try {
-      if (!roomAnswers[data.roomId]) roomAnswers[data.roomId] = {};
-      if (!roomAnswers[data.roomId][data.questionIndex]) roomAnswers[data.roomId][data.questionIndex] = [];
+        if (!roomAnswers[data.roomId]) roomAnswers[data.roomId] = {};
+        if (!roomAnswers[data.roomId][data.questionIndex]) roomAnswers[data.roomId][data.questionIndex] = [];
 
-      roomAnswers[data.roomId][data.questionIndex].push({
-        userId: data.userId,
-        answerIndex: parseInt(data.answerIndex),
-        answerTime: data.answerTime
-      });
-
-      const scoreRow = await new Promise((resolve, reject) => {
-        usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
+        roomAnswers[data.roomId][data.questionIndex].push({
+            userId: data.userId,
+            answerIndex: parseInt(data.answerIndex),
+            answerTime: data.answerTime
         });
-      });
 
-      const score = scoreRow ? scoreRow.score : 0;
-      io.to(`room_${data.roomId}`).emit('user_answered', { ...data, score });
+        const scoreRow = await new Promise((resolve, reject) => {
+            usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
+                if (err) reject(err);
+                else resolve(row);
+            });
+        });
+
+        const currentScore = scoreRow ? scoreRow.score : 0;
+        const newScore = currentScore + (data.answerIndex === correctIndex ? 10 : 0); // Example: 10 points for correct answer
+
+        await new Promise((resolve, reject) => {
+            usersDB.run('UPDATE room_players SET score = ? WHERE room_id = ? AND user_id = ?', [newScore, data.roomId, data.userId], (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+
+        io.to(`room_${data.roomId}`).emit('user_answered', { ...data, score: newScore });
 
     } catch (error) {
       console.error('Error in submit_answer:', error);
@@ -296,6 +305,13 @@ const setupRoomHandlers = (io, socket) => {
       const correct = answers.filter(a => a.answerIndex === correctIndex)
         .sort((a, b) => a.answerTime - b.answerTime);
 
+      io.to(`room_${roomId}`).emit('answer_revealed', { questionIndex, correct });
+    } catch (error) {
+      console.error('Error in reveal_answer:', error);
+      socket.emit('game_error', { message: 'เกิดข้อผิดพลาดในการเปิดเผยคำตอบ' });
+    }
+  });
+
   // Owner deletes room
   socket.on('delete_room', async (roomId, userId) => {
     try {
@@ -318,75 +334,25 @@ const setupRoomHandlers = (io, socket) => {
         });
       });
       await new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM questions WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      await new Promise((resolve, reject) => {
         usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err) => {
           if (err) reject(err);
           else resolve();
         });
       });
-      io.to(`room_${roomId}`).emit('room_deleted', { roomId });
+
+      io.to(`room_${roomId}`).emit('room_deleted');
+      io.socketsLeave(`room_${roomId}`);
+
     } catch (error) {
       console.error('Error in delete_room:', error);
       socket.emit('game_error', { message: 'เกิดข้อผิดพลาดในการลบห้อง' });
     }
   });
-
-      for (let i = 0; i < correct.length; i++) {
-        const addScore = Math.max(4 - i, 0);
-        const answer = correct[i];
-
-        await new Promise((resolve, reject) => {
-          usersDB.run('UPDATE room_players SET score = score + ? WHERE user_id = ? AND room_id = ?', [addScore, answer.userId, roomId], (err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
-      }
-
-      // broadcast เฉลยและอันดับ
-      io.to(`room_${roomId}`).emit('answer_revealed', {
-        questionIndex,
-        correctUserIds: correct.map(a => a.userId),
-        correctIndex,
-        rank: correct.map(a => a.userId)
-      });
-
-    } catch (error) {
-      console.error('Error in reveal_answer:', error);
-    }
-  });
-
-  // เมื่อสรุปเกม
-  socket.on('game_summary', async (roomId) => {
-    try {
-      const players = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT users.id, users.name, room_players.score FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
-        });
-      });
-
-      players.sort((a, b) => b.score - a.score);
-      io.to(`room_${roomId}`).emit('game_summary', players);
-
-    } catch (error) {
-      console.error('Error in game_summary:', error);
-    }
-  });
-
-  // เมื่อไปข้อถัดไป
-  socket.on('next_question', (roomId) => {
-    try {
-      io.to(`room_${roomId}`).emit('next_question');
-    } catch (error) {
-      console.error('Error in next_question:', error);
-    }
-  });
 };
 
-module.exports = { setupRoomHandlers }; 
+module.exports = {
+  updatePlayerList,
+  addPlayerToRoom,
+  removePlayerFromRoom,
+  setupRoomHandlers
+};
