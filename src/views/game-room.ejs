@@ -54,7 +54,7 @@
     <h3 class="text-lg font-semibold mb-2">คะแนน</h3>
     <ul id="score-list">
       <% players.forEach(function(player) { %>
-        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>"><i class="fa-solid fa-user"></i> <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span></span></li>
+        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>"><i class="fa-solid fa-user"></i> <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span>></span></li>
       <% }); %>
     </ul>
     <div id="ingredient-shop" class="mt-8">

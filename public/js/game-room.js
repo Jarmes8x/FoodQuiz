@@ -1,8 +1,12 @@
-
 const socket = io();
 let currentQuestion = 0;
 let answered = false;
 let startTime = null;
+
+// ตัวแปรสำหรับเก็บสถานะเกม - รวมจากไฟล์แรก
+let currentPlayerScore = 0;
+let playerIngredients = [];
+
 // สำหรับวัตถุดิบและอาหาร
 let myPoints = 0;
 let myIngredients = [];
@@ -47,6 +51,201 @@ function showNotification(message, type = 'info') {
   }, 3000);
 }
 
+// ===============================
+// เพิ่มส่วนการซื้อวัตถุดิบจากไฟล์แรก
+// ===============================
+
+// ฟังก์ชันซื้อวัตถุดิบ - จากไฟล์แรก
+function buyIngredient(ingredientName) {
+  // ค้นหาราคาจาก DOM
+  const ingredientBtn = document.querySelector(`[data-ingredient="${ingredientName}"]`);
+  if (!ingredientBtn) return;
+  
+  const buttonText = ingredientBtn.textContent;
+  const priceMatch = buttonText.match(/\((\d+) แต้ม\)/);
+  const price = priceMatch ? parseInt(priceMatch[1]) : 0;
+  
+  // ตรวจสอบคะแนนก่อนซื้อ
+  if (currentPlayerScore < price) {
+    alert(`คะแนนไม่พอ! ต้องการ ${price} คะแนน คุณมี ${currentPlayerScore} คะแนน`);
+    return;
+  }
+  
+  // ยืนยันการซื้อ
+  if (confirm(`คุณต้องการซื้อ ${ingredientName} ราคา ${price} คะแนน หรือไม่?`)) {
+    socket.emit('buy-ingredient', {
+      roomId: window.roomId || roomId,
+      ingredientName: ingredientName
+    });
+  }
+}
+
+// ฟังก์ชันทำอาหาร - จากไฟล์แรก
+function cookMeal(mealName, requiredIngredientsStr) {
+  const requiredIngredients = requiredIngredientsStr.split(',').map(ing => ing.trim());
+  
+  // ตรวจสอบว่ามีวัตถุดิบครบหรือไม่
+  const missingIngredients = requiredIngredients.filter(ing => !playerIngredients.includes(ing));
+  
+  if (missingIngredients.length > 0) {
+    alert(`คุณยังขาดวัตถุดิบ: ${missingIngredients.join(', ')}`);
+    return;
+  }
+  
+  // ทำอาหารสำเร็จ
+  alert(`ทำ ${mealName} สำเร็จ! 🍽️`);
+  showCookingSuccessAnimation(mealName);
+}
+
+// ===============================
+// Socket Event Handlers เพิ่มเติมจากไฟล์แรก
+// ===============================
+
+// รับการอัปเดตคะแนน - จากไฟล์แรก
+socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained }) => {
+  console.log(`คะแนนอัปเดต: ${playerName} = ${newScore} (${scoreGained >= 0 ? '+' : ''}${scoreGained})`);
+  
+  // อัปเดต score ใน player list
+  const scoreEl = document.getElementById(`score-${playerId}`);
+  if (scoreEl) {
+    scoreEl.textContent = newScore;
+  }
+
+  // อัปเดต score ใน score list ด้วย
+  const scoreListEl = document.querySelector(`#score-list #score-${playerId}`);
+  if (scoreListEl) {
+    scoreListEl.textContent = newScore;
+  }
+
+  // ถ้าเป็นผู้เล่นเอง
+  if ((window.user && window.user.id === playerId) || (user && user.id === playerId)) {
+    updateMyScore(newScore);
+    
+    // แสดง animation
+    if (scoreGained > 0) {
+      showScoreGainAnimation(scoreGained);
+    } else if (scoreGained < 0) {
+      showScoreLossAnimation(Math.abs(scoreGained));
+    }
+  }
+});
+
+// รับผลการซื้อวัตถุดิบ - จากไฟล์แรก
+socket.on('ingredient-purchased', ({ ingredientName, price, newScore, ingredients, imageFile }) => {
+  console.log(`ซื้อสำเร็จ: ${ingredientName} ราคา ${price} คะแนน`);
+  
+  // อัปเดตคะแนนและวัตถุดิบของตัวเอง
+  updateMyScore(newScore);
+  updateMyIngredients(ingredients);
+
+  // แสดงข้อความซื้อสำเร็จ
+  showPurchaseSuccessMessage(ingredientName, price);
+  
+  // ตรวจสอบอาหารที่ทำได้ใหม่
+  socket.emit('check-cookable-meals', { roomId: window.roomId || roomId });
+});
+
+// รับรายการวัตถุดิบทั้งหมด - จากไฟล์แรก
+socket.on('ingredients-list', ({ ingredients }) => {
+  console.log('ได้รับรายการวัตถุดิบ:', ingredients.length, 'รายการ');
+  // อัปเดต UI ถ้าจำเป็น
+});
+
+// รับอาหารที่สามารถทำได้ - จากไฟล์แรก
+socket.on('cookable-meals-updated', ({ playerIngredients, cookableMeals }) => {
+  console.log('อาหารที่ทำได้:', cookableMeals.length, 'รายการ');
+  updateCookableMealsUI(cookableMeals);
+});
+
+// รับการ reset เกม - จากไฟล์แรก
+socket.on('game-reset', ({ message }) => {
+  alert(message);
+  updateMyScore(0);
+  updateMyIngredients([]);
+});
+
+// ===============================
+// UI Update Functions จากไฟล์แรก
+// ===============================
+
+function updateMyScore(newScore) {
+  currentPlayerScore = newScore;
+  myPoints = newScore; // ซิงค์ค่า
+  
+  const myPointsEl = document.getElementById('my-points');
+  if (myPointsEl) {
+    myPointsEl.textContent = newScore;
+  }
+}
+
+function updateMyIngredients(ingredients) {
+  playerIngredients = ingredients;
+  myIngredients = ingredients; // ซิงค์ค่า
+  
+  const myIngredientsEl = document.getElementById('my-ingredients');
+  if (myIngredientsEl) {
+    myIngredientsEl.textContent = ingredients.length > 0 ? ingredients.join(', ') : 'ยังไม่มี';
+  }
+}
+
+function updateCookableMealsUI(cookableMeals) {
+  // เพิ่มคลาส highlight ให้อาหารที่ทำได้
+  document.querySelectorAll('.cook-meal-btn').forEach(btn => {
+    const mealName = btn.dataset.meal;
+    const canCook = cookableMeals.some(meal => meal.meal_name === mealName);
+    
+    if (canCook) {
+      btn.classList.remove('bg-green-500', 'hover:bg-green-600');
+      btn.classList.add('bg-orange-500', 'hover:bg-orange-600', 'animate-pulse');
+      btn.innerHTML = '<i class="fa-solid fa-fire mr-1"></i>พร้อมทำ!';
+    } else {
+      btn.classList.remove('bg-orange-500', 'hover:bg-orange-600', 'animate-pulse');
+      btn.classList.add('bg-green-500', 'hover:bg-green-600');
+      btn.innerHTML = '<i class="fa-solid fa-fire mr-1"></i>ทำอาหาร';
+    }
+  });
+}
+
+// ===============================
+// Animation Functions จากไฟล์แรก
+// ===============================
+
+function showScoreGainAnimation(scoreGained) {
+  const el = document.createElement('div');
+  el.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 text-3xl font-bold text-green-600 animate-bounce z-50';
+  el.textContent = `+${scoreGained} คะแนน!`;
+  document.body.appendChild(el);
+  
+  setTimeout(() => el.remove(), 2000);
+}
+
+function showScoreLossAnimation(scoreUsed) {
+  const el = document.createElement('div');
+  el.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 text-2xl font-bold text-red-600 animate-pulse z-50';
+  el.textContent = `-${scoreUsed} คะแนน`;
+  document.body.appendChild(el);
+  
+  setTimeout(() => el.remove(), 2000);
+}
+
+function showPurchaseSuccessMessage(ingredientName, price) {
+  const el = document.createElement('div');
+  el.className = 'fixed top-32 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
+  el.innerHTML = `<i class="fa-solid fa-check mr-2"></i>ซื้อ ${ingredientName} สำเร็จ! (-${price} คะแนน)`;
+  document.body.appendChild(el);
+  
+  setTimeout(() => el.remove(), 3000);
+}
+
+function showCookingSuccessAnimation(mealName) {
+  const el = document.createElement('div');
+  el.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-white px-8 py-4 rounded-xl shadow-lg z-50 text-xl font-bold';
+  el.innerHTML = `<i class="fa-solid fa-utensils mr-2"></i>ทำ ${mealName} สำเร็จ!`;
+  document.body.appendChild(el);
+  
+  setTimeout(() => el.remove(), 3000);
+}
+
 // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
 function updateMyShopUI() {
   document.getElementById('my-points').textContent = myPoints;
@@ -58,6 +257,9 @@ socket.on('update_points_ingredients', data => {
   if (data.userId === user.id) {
     myPoints = data.points;
     myIngredients = data.ingredients || [];
+    currentPlayerScore = data.points; // ซิงค์ค่า
+    playerIngredients = data.ingredients || []; // ซิงค์ค่า
+    
     // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
     if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
       myFood = data.food;
@@ -69,17 +271,20 @@ socket.on('update_points_ingredients', data => {
     }
   }
 });
+
 // ฟังก์ชั่นแสดงป๊อบอัพอาหาร
 function showFoodModal(food) {
   const modal = document.getElementById('food-modal');
   const content = document.getElementById('food-modal-content');
-  content.textContent = food;
-  modal.classList.remove('hidden');
+  if (modal && content) {
+    content.textContent = food;
+    modal.classList.remove('hidden');
+  }
 }
-document.getElementById('close-food-modal').onclick = function () {
-  document.getElementById('food-modal').classList.add('hidden');
-};
 
+// ===============================
+// Event Listeners รวม
+// ===============================
 document.addEventListener('DOMContentLoaded', () => {
   // จัดการปุ่มลบห้อง (เฉพาะเจ้าของห้อง)
   const deleteRoomBtn = document.getElementById('delete-room-btn');
@@ -91,34 +296,80 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
-  document.querySelectorAll('.ingredient-btn').forEach(btn => {
-    btn.onclick = () => {
-      const ing = btn.getAttribute('data-ingredient');
-      socket.emit('buy_ingredient', { roomId, userId: user.id, ingredient: ing });
-    };
+  // Event Listeners สำหรับปุ่มต่างๆ - รวมจากไฟล์แรก
+  document.addEventListener('click', function(e) {
+    // ปุ่มซื้อวัตถุดิบ
+    if (e.target.classList.contains('ingredient-btn')) {
+      const ingredientName = e.target.dataset.ingredient;
+      buyIngredient(ingredientName);
+    }
+    
+    // ปุ่มทำอาหาร
+    if (e.target.classList.contains('cook-meal-btn')) {
+      const mealName = e.target.dataset.meal;
+      const requiredIngredients = e.target.dataset.ingredients;
+      cookMeal(mealName, requiredIngredients);
+    }
+    
+    // ปุ่มสุ่มอาหาร
+    if (e.target.id === 'random-food-btn') {
+      socket.emit('random_food', { roomId, userId: user.id });
+    }
+    
+    // ปุ่มตอบคำถาม (ถ้ามี)
+    if (e.target.classList.contains('answer-btn')) {
+      const answer = e.target.dataset.answer;
+      sendAnswer(answer);
+    }
   });
-  document.getElementById('random-food-btn').onclick = () => {
-    socket.emit('random_food', { roomId, userId: user.id });
-  };
+
+  // ปิดโมดอลอาหาร
+  const closeFoodModalBtn = document.getElementById('close-food-modal');
+  if (closeFoodModalBtn) {
+    closeFoodModalBtn.onclick = function () {
+      document.getElementById('food-modal').classList.add('hidden');
+    };
+  }
+
+  // ดึงรายการวัตถุดิบ - จากไฟล์แรก
+  if (window.roomId || roomId) {
+    socket.emit('get-ingredients', { roomId: window.roomId || roomId });
+  }
+  
   updateMyShopUI();
 });
 
-// อัปเดตแต้มและวัตถุดิบของฉัน
-function updateMyShopUI() {
-  document.getElementById('my-points').textContent = myPoints;
-  document.getElementById('my-ingredients').textContent = myIngredients.join(', ') || '-';
-  document.getElementById('my-food').textContent = myFood;
+// ===============================
+// ฟังก์ชันตอบคำถาม - จากไฟล์แรก
+// ===============================
+function sendAnswer(selectedAnswer) {
+  console.log(`Sending answer: ${selectedAnswer} to room: ${window.roomId || roomId}`);
+  
+  socket.emit('answer-question', {
+    roomId: window.roomId || roomId,
+    answer: selectedAnswer
+  });
+  
+  // ปิดการใช้งานปุ่มหลังจากตอบ
+  const answerButtons = document.querySelectorAll('.answer-btn');
+  answerButtons.forEach(btn => {
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+  });
 }
 
-// รับ event อัปเดตแต้ม/วัตถุดิบ (หลังจบเกมหรือซื้อวัตถุดิบ)
-socket.on('update_points_ingredients', data => {
-  if (data.userId === user.id) {
-    myPoints = data.points;
-    myIngredients = data.ingredients || [];
-    myFood = data.food || '';
-    updateMyShopUI();
+// ===============================
+// สุ่มอาหาร - ปรับปรุงจากไฟล์แรก
+// ===============================
+function randomFood() {
+  if (playerIngredients.length === 0) {
+    alert('คุณยังไม่มีวัตถุดิบ กรุณาซื้อวัตถุดิบก่อน');
+    return;
   }
-});
+  
+  // ใช้ socket.emit แทนการสุ่มใน client
+  socket.emit('random_food', { roomId: window.roomId || roomId, userId: user.id });
+}
 
 // รับ event อาหารที่สุ่มได้เมื่อเข้าห้อง
 socket.on('foods_assigned', data => {
@@ -163,8 +414,6 @@ function enableIngredientShop() {
   };
   updateMyShopUI();
 }
-
-
 
 // เรียกใช้ enableIngredientShop เมื่อเกมเริ่มเท่านั้น
 // --- Game Start: Show ingredient modal, then randomize food, then show food modal ---
@@ -236,8 +485,6 @@ socket.on('update_room_player_count', data => {
   }
 });
 
-
-
 // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ
 window.addEventListener('beforeunload', () => {
   socket.emit('leave_room', roomId, user);
@@ -247,7 +494,6 @@ window.addEventListener('beforeunload', () => {
 window.addEventListener('popstate', () => {
   socket.emit('leave_room', roomId, user);
 });
-
 
 // Owner starts game
 if (isOwner) {
@@ -314,7 +560,6 @@ socket.on('select_questions', function (questions) {
     socket.emit('start_game', roomId, user.id);
   };
 });
-
 
 // รับชุดคำถามที่ใช้เล่นจริง (ทุกคนในห้อง)
 socket.on('game_questions', function (selectedQuestions) {
@@ -687,7 +932,10 @@ function clearQuestionTimeout() {
 socket.on('user_answered', data => {
   // อัปเดตคะแนน
   if (data.userId && data.score !== undefined) {
-    document.getElementById('score-' + data.userId).textContent = data.score;
+    const scoreEl = document.getElementById('score-' + data.userId);
+    if (scoreEl) {
+      scoreEl.textContent = data.score;
+    }
   }
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
   if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
@@ -702,7 +950,13 @@ socket.on('user_answered', data => {
   }
 });
 
-// แสดงเฉลยคำตอบ
+// Socket event handlers สำหรับเกมคำถาม
+socket.on('answer-question', ({ roomId, answer }) => {
+  // จัดการคำตอบจาก client อื่น ๆ
+  console.log('Answer received:', { roomId, answer });
+});
+
+// แสดงเฉลยคำตอบ (ปรับปรุงจากไฟล์เดิม)
 function showAnswer() {
   const q = questions[currentQuestion];
   if (!q) return;
@@ -759,7 +1013,7 @@ function showAnswer() {
   `;
 }
 
-// สรุปคะแนนและจัดอันดับ
+// สรุปคะแนนและจัดอันดับ (ปรับปรุงจากไฟล์เดิม)
 function showSummary() {
   const gameArea = document.getElementById('game-area');
   
