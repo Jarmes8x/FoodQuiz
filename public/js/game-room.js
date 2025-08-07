@@ -35,20 +35,26 @@ socket.on('game_error', function (data) {
 
 // ฟังก์ชันแสดงการแจ้งเตือน
 function showNotification(message, type = 'info') {
-  // สร้าง notification element
-  const notification = document.createElement('div');
-  notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 ${
-    type === 'info' ? 'bg-blue-500' : 
-    type === 'success' ? 'bg-green-500' : 
-    type === 'error' ? 'bg-red-500' : 'bg-gray-500'
-  }`;
-  notification.textContent = message;
-  document.body.appendChild(notification);
+  const iconMap = {
+    'info': 'info',
+    'success': 'success',
+    'error': 'error',
+    'warning': 'warning'
+  };
   
-  // ลบ notification หลังจาก 3 วินาที
-  setTimeout(() => {
-    notification.remove();
-  }, 3000);
+  Swal.fire({
+    title: message,
+    icon: iconMap[type] || 'info',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#fff',
+    customClass: {
+      popup: 'rounded-lg shadow-lg'
+    }
+  });
 }
 
 // ===============================
@@ -67,17 +73,34 @@ function buyIngredient(ingredientName) {
   
   // ตรวจสอบคะแนนก่อนซื้อ
   if (currentPlayerScore < price) {
-    alert(`คะแนนไม่พอ! ต้องการ ${price} คะแนน คุณมี ${currentPlayerScore} คะแนน`);
+    Swal.fire({
+      title: 'คะแนนไม่พอ!',
+      text: `ต้องการ ${price} คะแนน คุณมี ${currentPlayerScore} คะแนน`,
+      icon: 'warning',
+      confirmButtonText: 'ตกลง',
+      confirmButtonColor: '#f59e0b'
+    });
     return;
   }
   
   // ยืนยันการซื้อ
-  if (confirm(`คุณต้องการซื้อ ${ingredientName} ราคา ${price} คะแนน หรือไม่?`)) {
-    socket.emit('buy-ingredient', {
-      roomId: window.roomId || roomId,
-      ingredientName: ingredientName
-    });
-  }
+  Swal.fire({
+    title: 'ยืนยันการซื้อ',
+    text: `คุณต้องการซื้อ ${ingredientName} ราคา ${price} คะแนน หรือไม่?`,
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'ซื้อ',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#10b981',
+    cancelButtonColor: '#ef4444'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      socket.emit('buy-ingredient', {
+        roomId: window.roomId || roomId,
+        ingredientName: ingredientName
+      });
+    }
+  });
 }
 
 // ฟังก์ชันทำอาหาร - จากไฟล์แรก
@@ -88,12 +111,26 @@ function cookMeal(mealName, requiredIngredientsStr) {
   const missingIngredients = requiredIngredients.filter(ing => !playerIngredients.includes(ing));
   
   if (missingIngredients.length > 0) {
-    alert(`คุณยังขาดวัตถุดิบ: ${missingIngredients.join(', ')}`);
+    Swal.fire({
+      title: 'วัตถุดิบไม่ครบ!',
+      text: `คุณยังขาดวัตถุดิบ: ${missingIngredients.join(', ')}`,
+      icon: 'warning',
+      confirmButtonText: 'ตกลง',
+      confirmButtonColor: '#f59e0b'
+    });
     return;
   }
   
   // ทำอาหารสำเร็จ
-  alert(`ทำ ${mealName} สำเร็จ! 🍽️`);
+  Swal.fire({
+    title: 'ทำอาหารสำเร็จ!',
+    text: `${mealName} 🍽️`,
+    icon: 'success',
+    confirmButtonText: 'เยี่ยม!',
+    confirmButtonColor: '#10b981',
+    timer: 2000,
+    timerProgressBar: true
+  });
   showCookingSuccessAnimation(mealName);
 }
 
@@ -161,7 +198,13 @@ socket.on('cookable-meals-updated', ({ playerIngredients, cookableMeals }) => {
 
 // รับการ reset เกม - จากไฟล์แรก
 socket.on('game-reset', ({ message }) => {
-  alert(message);
+  Swal.fire({
+    title: 'เกมถูกรีเซ็ต',
+    text: message,
+    icon: 'info',
+    confirmButtonText: 'ตกลง',
+    confirmButtonColor: '#3b82f6'
+  });
   updateMyScore(0);
   updateMyIngredients([]);
 });
@@ -213,39 +256,65 @@ function updateCookableMealsUI(cookableMeals) {
 // ===============================
 
 function showScoreGainAnimation(scoreGained) {
-  const el = document.createElement('div');
-  el.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 text-3xl font-bold text-green-600 animate-bounce z-50';
-  el.textContent = `+${scoreGained} คะแนน!`;
-  document.body.appendChild(el);
-  
-  setTimeout(() => el.remove(), 2000);
+  Swal.fire({
+    title: `+${scoreGained} คะแนน!`,
+    icon: 'success',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true,
+    background: '#fff',
+    customClass: {
+      popup: 'rounded-lg shadow-lg text-green-600'
+    }
+  });
 }
 
 function showScoreLossAnimation(scoreUsed) {
-  const el = document.createElement('div');
-  el.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 text-2xl font-bold text-red-600 animate-pulse z-50';
-  el.textContent = `-${scoreUsed} คะแนน`;
-  document.body.appendChild(el);
-  
-  setTimeout(() => el.remove(), 2000);
+  Swal.fire({
+    title: `-${scoreUsed} คะแนน`,
+    icon: 'warning',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true,
+    background: '#fff',
+    customClass: {
+      popup: 'rounded-lg shadow-lg text-red-600'
+    }
+  });
 }
 
 function showPurchaseSuccessMessage(ingredientName, price) {
-  const el = document.createElement('div');
-  el.className = 'fixed top-32 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-50';
-  el.innerHTML = `<i class="fa-solid fa-check mr-2"></i>ซื้อ ${ingredientName} สำเร็จ! (-${price} คะแนน)`;
-  document.body.appendChild(el);
-  
-  setTimeout(() => el.remove(), 3000);
+  Swal.fire({
+    title: 'ซื้อสำเร็จ!',
+    text: `ซื้อ ${ingredientName} สำเร็จ! (-${price} คะแนน)`,
+    icon: 'success',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#fff',
+    customClass: {
+      popup: 'rounded-lg shadow-lg'
+    }
+  });
 }
 
 function showCookingSuccessAnimation(mealName) {
-  const el = document.createElement('div');
-  el.className = 'fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-white px-8 py-4 rounded-xl shadow-lg z-50 text-xl font-bold';
-  el.innerHTML = `<i class="fa-solid fa-utensils mr-2"></i>ทำ ${mealName} สำเร็จ!`;
-  document.body.appendChild(el);
-  
-  setTimeout(() => el.remove(), 3000);
+  Swal.fire({
+    title: 'ทำอาหารสำเร็จ!',
+    text: `${mealName} 🍽️`,
+    icon: 'success',
+    confirmButtonText: 'เยี่ยม!',
+    confirmButtonColor: '#10b981',
+    timer: 2000,
+    timerProgressBar: true,
+    background: '#fff'
+  });
 }
 
 // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
@@ -276,12 +345,18 @@ socket.on('update_points_ingredients', data => {
 
 // ฟังก์ชั่นแสดงป๊อบอัพอาหาร
 function showFoodModal(food) {
-  const modal = document.getElementById('food-modal');
-  const content = document.getElementById('food-modal-content');
-  if (modal && content) {
-    content.textContent = food;
-    modal.classList.remove('hidden');
-  }
+  Swal.fire({
+    title: 'อาหารที่คุณได้รับ',
+    text: food,
+    icon: 'success',
+    confirmButtonText: 'ตกลง',
+    confirmButtonColor: '#8b5cf6',
+    background: '#fff',
+    customClass: {
+      title: 'text-purple-700 text-xl font-bold',
+      content: 'text-green-700 text-2xl font-bold'
+    }
+  });
 }
 
 // ===============================
@@ -292,9 +367,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const deleteRoomBtn = document.getElementById('delete-room-btn');
   if (deleteRoomBtn && isOwner) {
     deleteRoomBtn.onclick = function() {
-      if (confirm('คุณต้องการลบห้องนี้ใช่หรือไม่?')) {
-        socket.emit('delete_room', roomId, user.id);
-      }
+      Swal.fire({
+        title: 'ยืนยันการลบห้อง',
+        text: 'คุณต้องการลบห้องนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ลบห้อง',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          socket.emit('delete_room', roomId, user.id);
+        }
+      });
     };
   }
 
@@ -327,13 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // ปิดโมดอลอาหาร
-  const closeFoodModalBtn = document.getElementById('close-food-modal');
-  if (closeFoodModalBtn) {
-    closeFoodModalBtn.onclick = function () {
-      document.getElementById('food-modal').classList.add('hidden');
-    };
-  }
+
 
   // ดึงรายการวัตถุดิบ - จากไฟล์แรก
   if (window.roomId || roomId) {
@@ -367,7 +447,13 @@ function sendAnswer(selectedAnswer) {
 // ===============================
 function randomFood() {
   if (playerIngredients.length === 0) {
-    alert('คุณยังไม่มีวัตถุดิบ กรุณาซื้อวัตถุดิบก่อน');
+    Swal.fire({
+      title: 'ไม่มีวัตถุดิบ!',
+      text: 'คุณยังไม่มีวัตถุดิบ กรุณาซื้อวัตถุดิบก่อน',
+      icon: 'info',
+      confirmButtonText: 'ตกลง',
+      confirmButtonColor: '#3b82f6'
+    });
     return;
   }
   
@@ -526,48 +612,182 @@ if (isOwner) {
 
 // Owner receives questions to select
 socket.on('select_questions', function (questions) {
-  let html = `<div id="question-select-modal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-xl p-8 max-w-2xl w-full">
-        <h3 class="text-xl font-bold mb-4">เลือกคำถามสำหรับเกมนี้ (เลือก 14 ข้อ)</h3>
-        <div id="question-select-alert" class="mb-2 text-red-600 font-semibold hidden">เลือกครบ 14 ข้อแล้ว</div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-96 overflow-y-auto mb-4">
-          ${questions.map((q, i) => `
-            <label class="flex items-start gap-2">
-              <input type="checkbox" class="q-checkbox" value="${q.rowid}">
-              <span>${i + 1}. ${q.question_text}</span>
-            </label>
-          `).join('')}
+  // สร้าง HTML สำหรับ SweetAlert content
+  let questionsHtml = `
+    <div class="text-left mb-4">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+        <div class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium self-start sm:self-auto">
+          เลือก <span id="selected-count">0</span>/14 ข้อ
         </div>
-        <button id="confirm-questions-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-2 rounded-xl">ยืนยัน</button>
       </div>
-    </div>`;
-  document.body.insertAdjacentHTML('beforeend', html);
-  // Alert when 14 selected
-  const checkboxes = document.querySelectorAll('.q-checkbox');
-  const alert14 = document.getElementById('question-select-alert');
-  checkboxes.forEach(cb => {
-    cb.addEventListener('change', () => {
-      const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
-      if (checkedCount === 14) {
-        alert14.classList.remove('hidden');
-      } else {
-        alert14.classList.add('hidden');
-      }
-    });
+      
+      <div id="question-select-alert" class="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 font-medium text-sm hidden">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-check-circle text-green-600"></i>
+          <span>เลือกครบ 14 ข้อแล้ว! พร้อมเริ่มเกม</span>
+        </div>
+      </div>
+      
+      <div class="question-grid grid grid-cols-2 gap-3 max-h-[512px] overflow-y-auto mb-4 p-4 bg-gray-50 rounded-xl">
+  `;
+  
+  questions.forEach((q, i) => {
+    questionsHtml += `
+      <label class="question-card flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md">
+        <div class="flex-shrink-0 mt-1">
+          <input type="checkbox" class="q-checkbox w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2" value="${q.rowid}">
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="bg-purple-100 text-purple-800 text-xs font-bold px-2 py-1 rounded-full">${i + 1}</span>
+            <span class="text-xs text-gray-500 font-medium">คำถาม</span>
+          </div>
+          <span class="question-text text-sm text-gray-800 leading-relaxed">${q.question_text}</span>
+        </div>
+      </label>
+    `;
   });
-  document.getElementById('confirm-questions-btn').onclick = () => {
-    const checked = Array.from(document.querySelectorAll('.q-checkbox:checked')).map(cb => parseInt(cb.value));
-    if (checked.length !== 14) {
-      alert('กรุณาเลือก 14 ข้อ');
-      return;
+  
+  questionsHtml += `
+      </div>
+      
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-gray-600">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-info-circle text-blue-500"></i>
+          <span>คลิกที่คำถามเพื่อเลือก/ยกเลิก</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-clock text-orange-500"></i>
+          <span>เกมจะเริ่มทันทีหลังเลือกครบ</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  Swal.fire({
+    title: '<div class="flex items-center gap-3"><i class="fa-solid fa-gamepad text-purple-600"></i><span>เลือกคำถามสำหรับเกมนี้</span></div>',
+    showClass: {
+      popup: `
+        animate__animated
+        animate__fadeIn
+        animate__faster
+      `
+    },
+    hideClass: {
+      popup: `
+        animate__animated
+        animate__fadeOut
+        animate__faster
+      `
+    },
+    html: `
+      <style>
+        @keyframes bounceIn {
+          0% { transform: scale(0.3); opacity: 0; }
+          50% { transform: scale(1.05); }
+          70% { transform: scale(0.9); }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .question-card:hover {
+          transform: translateY(-2px);
+        }
+        @media (max-width: 768px) {
+          .question-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .question-card {
+            padding: 0.75rem !important;
+          }
+          .question-text {
+            font-size: 0.875rem !important;
+          }
+        }
+        @media (max-width: 480px) {
+          .question-card {
+            padding: 0.5rem !important;
+          }
+          .question-text {
+            font-size: 0.8rem !important;
+          }
+        }
+      </style>
+      ${questionsHtml}
+    `,
+    width: window.innerWidth < 768 ? '95%' : window.innerWidth < 1024 ? '800px' : '900px',
+    showCancelButton: true,
+    confirmButtonText: '<i class="fa-solid fa-play mr-2"></i>เริ่มเกม',
+    cancelButtonText: '<i class="fa-solid fa-times mr-2"></i>ยกเลิก',
+    confirmButtonColor: '#8b5cf6',
+    cancelButtonColor: '#6b7280',
+    allowOutsideClick: false,
+    customClass: {
+      popup: 'rounded-2xl shadow-2xl border-0',
+      title: 'text-lg sm:text-xl font-bold text-gray-800',
+      confirmButton: 'rounded-xl font-semibold px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base',
+      cancelButton: 'rounded-xl font-semibold px-4 sm:px-6 py-2 sm:py-3 text-sm sm:text-base',
+      htmlContainer: 'text-left'
+    },
+    didOpen: () => {
+      // Alert when 14 selected
+      const checkboxes = document.querySelectorAll('.q-checkbox');
+      const alert14 = document.getElementById('question-select-alert');
+      const selectedCount = document.getElementById('selected-count');
+      
+      checkboxes.forEach(cb => {
+        cb.addEventListener('change', () => {
+          const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
+          selectedCount.textContent = checkedCount;
+          
+          // อัปเดตสีของ counter
+          const counterElement = document.querySelector('.bg-purple-100');
+          if (checkedCount === 14) {
+            counterElement.className = 'bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium';
+            alert14.classList.remove('hidden');
+            // เพิ่ม animation
+            alert14.style.animation = 'bounceIn 0.6s ease-out';
+          } else if (checkedCount >= 10) {
+            counterElement.className = 'bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium';
+            alert14.classList.add('hidden');
+          } else {
+            counterElement.className = 'bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium';
+            alert14.classList.add('hidden');
+          }
+        });
+      });
+    },
+    preConfirm: () => {
+      const checked = Array.from(document.querySelectorAll('.q-checkbox:checked')).map(cb => parseInt(cb.value));
+      if (checked.length !== 14) {
+        Swal.showValidationMessage('กรุณาเลือก 14 ข้อ');
+        return false;
+      }
+      return checked;
     }
-    // Send selected question ids to backend
-    socket.emit('questions_selected', roomId, checked);
-    document.getElementById('question-select-modal').remove();
-    
-    // Start game immediately without countdown
-    socket.emit('start_game', roomId, user.id);
-  };
+  }).then((result) => {
+    if (result.isConfirmed) {
+      const selectedQuestions = result.value;
+      // Send selected question ids to backend
+      socket.emit('questions_selected', roomId, selectedQuestions);
+      
+      // Start game immediately without countdown
+      socket.emit('start_game', roomId, user.id);
+      
+      // แสดง SweetAlert แจ้งว่ากำลังเริ่มเกม
+      Swal.fire({
+        title: '<div class="flex items-center gap-3"><i class="fa-solid fa-rocket text-purple-600"></i><span>กำลังเริ่มเกม...</span></div>',
+        text: 'เกมจะเริ่มในไม่กี่วินาที พร้อมแล้ว! 🎮',
+        icon: 'success',
+        timer: 2000,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        customClass: {
+          popup: 'rounded-2xl shadow-2xl',
+          title: 'text-lg sm:text-xl font-bold text-gray-800',
+          timerProgressBar: 'bg-purple-600'
+        }
+      });
+    }
+  });
 });
 
 // รับชุดคำถามที่ใช้เล่นจริง (ทุกคนในห้อง)
