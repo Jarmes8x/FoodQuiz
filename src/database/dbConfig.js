@@ -9,7 +9,25 @@ const usersDB = new sqlite3.Database(dbPath, (err) => {
     console.log("Connected to SQLite database at:", dbPath);
   }
 });
-usersDB.configure('busyTimeout', 5000);
+
+// เพิ่มการจัดการ SQLITE_BUSY
+usersDB.configure('busyTimeout', 10000); // เพิ่ม timeout เป็น 10 วินาที
+
+// ฟังก์ชันสำหรับ retry เมื่อเกิด SQLITE_BUSY
+const executeWithRetry = async (operation, maxRetries = 3, delay = 100) => {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error.code === 'SQLITE_BUSY' && attempt < maxRetries) {
+        console.log(`Database busy, retrying in ${delay * attempt}ms (attempt ${attempt}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, delay * attempt));
+        continue;
+      }
+      throw error;
+    }
+  }
+};
 
 // ******************** Create Table
 usersDB.serialize(() => {
@@ -160,4 +178,4 @@ process.on("SIGINT", () => {
   });
 });
 
-module.exports = usersDB;
+module.exports = { usersDB, executeWithRetry };

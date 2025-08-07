@@ -130,6 +130,8 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
   }
 });
 
+
+
 // รับผลการซื้อวัตถุดิบ - จากไฟล์แรก
 socket.on('ingredient-purchased', ({ ingredientName, price, newScore, ingredients, imageFile }) => {
   console.log(`ซื้อสำเร็จ: ${ingredientName} ราคา ${price} คะแนน`);
@@ -296,6 +298,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+
+
   // Event Listeners สำหรับปุ่มต่างๆ - รวมจากไฟล์แรก
   document.addEventListener('click', function(e) {
     // ปุ่มซื้อวัตถุดิบ
@@ -423,16 +427,18 @@ let gameStartHandled = false;
 console.log('Joining room:', { roomId, user });
 socket.emit('join_room', roomId, user);
 
-// อัปเดตรายชื่อผู้เล่นเมื่อเข้าห้องครั้งแรก
+// อัปเดตรายชื่อผู้เล่นเมื่อเข้าห้องครั้งแรกและแบบ realtime
 socket.on('player_list_updated', data => {
   console.log('Received player_list_updated:', data);
   if (data && data.roomId == roomId && data.players) {
-    console.log('Updating player list:', data.players);
+    console.log('Updating player list with scores:', data.players);
     updatePlayerList(data.players);
   } else {
     console.log('Invalid player_list_updated data:', data);
   }
 });
+
+
 
 // ฟังก์ชันอัปเดตรายชื่อผู้เล่น
 function updatePlayerList(players) {
@@ -455,8 +461,9 @@ function updatePlayerList(players) {
 
   players.forEach(player => {
     if (player && player.id && player.name !== undefined) {
-      list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${player.score || 0}</span></li>`;
-      scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold">+<span id="score-${player.id}">${player.score || 0}</span></span></li>`;
+      const score = player.score || 0;
+      list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">${score}</span></li>`;
+      scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold"><span id="score-${player.id}">${score}</span></span></li>`;
     } else {
       console.warn('Invalid player data:', player);
     }
@@ -487,12 +494,14 @@ socket.on('update_room_player_count', data => {
 
 // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ
 window.addEventListener('beforeunload', () => {
-  socket.emit('leave_room', roomId, user);
+  // ไม่ต้องส่ง leave_room event เพื่อไม่ให้ลบข้อมูลคะแนน
+  console.log('User leaving page, preserving score data');
 });
 
 // จัดการเมื่อผู้ใช้กดปุ่มย้อนกลับ
 window.addEventListener('popstate', () => {
-  socket.emit('leave_room', roomId, user);
+  // ไม่ต้องส่ง leave_room event เพื่อไม่ให้ลบข้อมูลคะแนน
+  console.log('User navigating back, preserving score data');
 });
 
 // Owner starts game
@@ -614,7 +623,14 @@ socket.on('game_questions', function (selectedQuestions) {
         answered = true;
         const answerIdx = btn.getAttribute('data-idx');
         const answerTime = Date.now() - startTime;
-        socket.emit('submit_answer', { roomId, userId: user.id, answerIndex: answerIdx, answerTime });
+        socket.emit('submit_answer', { 
+          roomId, 
+          userId: user.id, 
+          answerIndex: answerIdx, 
+          answerTime,
+          questionIndex: currentQuestion,
+          currentQuestion: questions[currentQuestion]
+        });
         btn.classList.add('bg-green-300');
       };
     });
@@ -817,17 +833,27 @@ function showQuestion() {
         roomId, 
         userId: user.id, 
         answerIndex: -1, 
-        answerTime: 20000 // 20 วินาที
+        answerTime: 20000, // 20 วินาที
+        questionIndex: currentQuestion,
+        currentQuestion: questions[currentQuestion]
       });
     }
     
     // แจ้ง backend ว่าคำถามนี้จบแล้ว
-    socket.emit('question_ended', { roomId, questionIndex: currentQuestion });
+    socket.emit('question_ended', { 
+      roomId, 
+      questionIndex: currentQuestion,
+      currentQuestion: questions[currentQuestion]
+    });
     
     // รอ 1 วินาทีแล้วจบคำถาม (fallback)
     setTimeout(() => {
       if (!questionEnded) {
-        socket.emit('question_ended', { roomId, questionIndex: currentQuestion });
+        socket.emit('question_ended', { 
+          roomId, 
+          questionIndex: currentQuestion,
+          currentQuestion: questions[currentQuestion]
+        });
       }
     }, 1000);
   }
@@ -847,7 +873,9 @@ function showQuestion() {
         roomId, 
         userId: user.id, 
         answerIndex: selectedAnswerIdx, 
-        answerTime 
+        answerTime,
+        questionIndex: currentQuestion,
+        currentQuestion: questions[currentQuestion]
       });
       
       // แสดงปุ่มที่เลือกค้างไว้
@@ -937,6 +965,7 @@ socket.on('user_answered', data => {
       scoreEl.textContent = data.score;
     }
   }
+  
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
   if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
     selectedAnswerIdx = parseInt(data.answerIndex);
@@ -947,6 +976,11 @@ socket.on('user_answered', data => {
       }
       b.disabled = true;
     });
+    
+    // แสดง animation คะแนนที่ได้
+    if (data.isCorrect && data.scoreGained > 0) {
+      showScoreGainAnimation(data.scoreGained);
+    }
   }
 });
 

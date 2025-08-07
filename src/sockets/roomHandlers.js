@@ -1,14 +1,16 @@
-const usersDB = require('../database/dbConfig');
+const { usersDB, executeWithRetry } = require('../database/dbConfig');
 const { assignRandomFoodsToPlayer } = require('./foodHandlers');
 
 const roomAnswers = {};
 
 const updatePlayerList = async (io, roomId) => {
   try {
-    const players = await new Promise((resolve, reject) => {
-      usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, players) => {
-        if (err) reject(err);
-        else resolve(players || []);
+    const players = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, players) => {
+          if (err) reject(err);
+          else resolve(players || []);
+        });
       });
     });
 
@@ -27,18 +29,22 @@ const updatePlayerList = async (io, roomId) => {
 // ตรวจสอบและเพิ่มผู้เล่นในห้อง
 const addPlayerToRoom = async (roomId, user) => {
   try {
-    const existingPlayer = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT id FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, user.id], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    const existingPlayer = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT id FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, user.id], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
     });
 
     if (!existingPlayer) {
-      const room = await new Promise((resolve, reject) => {
-        usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
+      const room = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
         });
       });
 
@@ -49,10 +55,12 @@ const addPlayerToRoom = async (roomId, user) => {
       const isOwner = room.creator_id === user.id;
 
       // เพิ่มผู้เล่นลงในฐานข้อมูล
-      await new Promise((resolve, reject) => {
-        usersDB.run('INSERT INTO room_players (room_id, user_id, score, is_owner) VALUES (?, ?, 0, ?)', [roomId, user.id, isOwner ? 1 : 0], (err) => {
-          if (err) reject(err);
-          else resolve();
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('INSERT INTO room_players (room_id, user_id, score, is_owner) VALUES (?, ?, 0, ?)', [roomId, user.id, isOwner ? 1 : 0], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
       });
 
@@ -66,16 +74,12 @@ const addPlayerToRoom = async (roomId, user) => {
   }
 };
 
-// ลบผู้เล่นออกจากห้อง
+// ลบผู้เล่นออกจากห้อง (ไม่ลบข้อมูลคะแนน)
 const removePlayerFromRoom = async (roomId, user) => {
   try {
-    await new Promise((resolve, reject) => {
-      usersDB.run('DELETE FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, user.id], (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
+    // ไม่ลบข้อมูลผู้เล่นออกจากฐานข้อมูล เพื่อเก็บคะแนนไว้
+    // แค่ให้ออกจาก socket room เท่านั้น
+    console.log(`Player ${user.name} left room ${roomId} but data preserved`);
     return true;
   } catch (error) {
     console.error('Error removing player from room:', error);
@@ -117,7 +121,7 @@ const setupRoomHandlers = (io, socket) => {
     try {
       socket.leave(`room_${roomId}`);
 
-      // ลบผู้เล่นออกจากฐานข้อมูล
+      // ไม่ลบข้อมูลผู้เล่นออกจากฐานข้อมูล เพื่อเก็บคะแนนไว้
       await removePlayerFromRoom(roomId, user);
       io.to(`room_${roomId}`).emit('user_left', { user, socketId: socket.id });
       await updatePlayerList(io, roomId);
@@ -126,6 +130,8 @@ const setupRoomHandlers = (io, socket) => {
       console.error('Error in leave_room:', error);
     }
   });
+
+
 
   // เมื่อผู้เล่น disconnect
   socket.on('disconnect', async () => {
@@ -147,10 +153,12 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('start_game', async (roomId, ownerId) => {
     try {
       // ตรวจสอบว่าเป็นเจ้าของห้องหรือไม่
-      const room = await new Promise((resolve, reject) => {
-        usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
+      const room = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
         });
       });
 
@@ -173,10 +181,12 @@ const setupRoomHandlers = (io, socket) => {
     try {
       // ดึงคำถามจากฐานข้อมูลตาม ID ที่เลือก
       const placeholders = selectedQuestionIds.map(() => '?').join(',');
-      const questions = await new Promise((resolve, reject) => {
-        usersDB.all(`SELECT * FROM questions WHERE rowid IN (${placeholders})`, selectedQuestionIds, (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
+      const questions = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all(`SELECT * FROM questions WHERE rowid IN (${placeholders})`, selectedQuestionIds, (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
         });
       });
 
@@ -206,27 +216,104 @@ const setupRoomHandlers = (io, socket) => {
             answerTime: data.answerTime
         });
 
-        const scoreRow = await new Promise((resolve, reject) => {
-            usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
-                if (err) reject(err);
-                else resolve(row);
+        // ดึงข้อมูลคำถามปัจจุบันจาก client (ส่งมาจาก frontend)
+        const currentQuestionData = data.currentQuestion;
+        let isCorrect = false;
+        let scoreGained = 0;
+
+        console.log('submit_answer - data:', {
+          roomId: data.roomId,
+          userId: data.userId,
+          answerIndex: data.answerIndex,
+          currentQuestion: currentQuestionData
+        });
+
+        if (currentQuestionData && data.answerIndex !== -1) {
+            // ตรวจสอบคำตอบที่ถูกต้อง (answer_index เริ่มจาก 1 แต่ answerIndex เริ่มจาก 0)
+            const correctAnswerIndex = currentQuestionData.answer_index - 1;
+            isCorrect = parseInt(data.answerIndex) === correctAnswerIndex;
+
+            console.log('Answer check:', {
+              userAnswer: data.answerIndex,
+              correctAnswer: correctAnswerIndex,
+              isCorrect: isCorrect
             });
+
+            if (isCorrect) {
+                // คำนวณคะแนนตามเวลาที่ตอบ (ตอบไวได้คะแนนเยอะ)
+                const maxTime = 20000; // 20 วินาที
+                const timeUsed = Math.min(data.answerTime, maxTime);
+                const timeBonus = Math.max(0, maxTime - timeUsed);
+                
+                // คะแนนพื้นฐาน 10 คะแนน + โบนัสตามความเร็ว (สูงสุด 10 คะแนน)
+                const baseScore = 10;
+                const speedBonus = Math.floor((timeBonus / maxTime) * 10);
+                scoreGained = baseScore + speedBonus;
+
+                console.log('Score calculation:', {
+                  timeUsed: timeUsed,
+                  timeBonus: timeBonus,
+                  baseScore: baseScore,
+                  speedBonus: speedBonus,
+                  totalScore: scoreGained
+                });
+            }
+        }
+
+        // ดึงคะแนนปัจจุบัน
+        const scoreRow = await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
+              if (err) reject(err);
+              else resolve(row);
+            });
+          });
         });
 
         const currentScore = scoreRow ? scoreRow.score : 0;
-        const newScore = currentScore + (data.answerIndex === correctIndex ? 10 : 0); // Example: 10 points for correct answer
+        const newScore = currentScore + scoreGained;
 
-        await new Promise((resolve, reject) => {
-            usersDB.run('UPDATE room_players SET score = ? WHERE room_id = ? AND user_id = ?', [newScore, data.roomId, data.userId], (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
+        console.log('Score update:', {
+          currentScore: currentScore,
+          scoreGained: scoreGained,
+          newScore: newScore
         });
 
-        io.to(`room_${data.roomId}`).emit('user_answered', { ...data, score: newScore });
+        // อัปเดตคะแนนในฐานข้อมูล
+        await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.run('UPDATE room_players SET score = ? WHERE room_id = ? AND user_id = ?', [newScore, data.roomId, data.userId], (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+
+        // ส่งข้อมูลกลับไปยัง client พร้อมข้อมูลคะแนน
+        io.to(`room_${data.roomId}`).emit('user_answered', { 
+            ...data, 
+            score: newScore,
+            isCorrect: isCorrect,
+            scoreGained: scoreGained
+        });
+
+        // อัปเดตรายชื่อผู้เล่นเพื่อแสดงคะแนนใหม่
+        await updatePlayerList(io, data.roomId);
 
     } catch (error) {
       console.error('Error in submit_answer:', error);
+      
+      // แม้จะมี error ก็ยังส่งข้อมูลกลับไปยัง client
+      if (data.currentQuestion && data.answerIndex !== -1) {
+        const correctAnswerIndex = data.currentQuestion.answer_index - 1;
+        const isCorrect = parseInt(data.answerIndex) === correctAnswerIndex;
+        
+        io.to(`room_${data.roomId}`).emit('user_answered', { 
+            ...data, 
+            isCorrect: isCorrect,
+            scoreGained: isCorrect ? 10 : 0
+        });
+      }
     }
   });
 
@@ -234,10 +321,12 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('question_ended', async (data) => {
     try {
       // ตรวจสอบว่าทุกคนในห้องตอบแล้วหรือยัง
-      const players = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
+      const players = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
         });
       });
 
@@ -255,14 +344,18 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+
+
   // เมื่อผู้เล่นตอบคำถามแล้ว
   socket.on('answer_submitted', async (data) => {
     try {
       // ตรวจสอบว่าทุกคนในห้องตอบแล้วหรือยัง
-      const players = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
+      const players = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [data.roomId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
         });
       });
 
@@ -285,10 +378,12 @@ const setupRoomHandlers = (io, socket) => {
   // Owner requests questions (for modal selection)
   socket.on('request_questions', async (roomId) => {
     try {
-      const questions = await new Promise((resolve, reject) => {
-        usersDB.all('SELECT rowid, * FROM questions', [], (err, rows) => {
-          if (err) reject(err);
-          else resolve(rows || []);
+      const questions = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT rowid, * FROM questions', [], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
         });
       });
       io.to(socket.id).emit('select_questions', questions);
@@ -316,10 +411,12 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('delete_room', async (roomId, userId) => {
     try {
       // Check if user is owner
-      const room = await new Promise((resolve, reject) => {
-        usersDB.get('SELECT * FROM rooms WHERE id = ? AND creator_id = ?', [roomId, userId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
+      const room = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT * FROM rooms WHERE id = ? AND creator_id = ?', [roomId, userId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
         });
       });
       if (!room) {
@@ -327,16 +424,20 @@ const setupRoomHandlers = (io, socket) => {
         return;
       }
       // Delete room and related data
-      await new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
       });
-      await new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
       });
 

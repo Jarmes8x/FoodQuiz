@@ -1,4 +1,4 @@
-const usersDB = require("../database/dbConfig");
+const { usersDB, executeWithRetry } = require("../database/dbConfig");
 const jwt = require('jsonwebtoken');
 const jwtSecret = process.env.JWT_SECRET || 'jwt-secret-key';
 
@@ -32,15 +32,17 @@ exports.loginPost = async (req, res) => {
   }
 
   try {
-    await new Promise((resolve, reject) => {
-      usersDB.serialize(() => {
-        usersDB.run('INSERT OR IGNORE INTO users (name) VALUES (?)', [name.trim()], function (err) {
-          if (err) return reject(err);
-          usersDB.get('SELECT id, name FROM users WHERE name = ?', [name.trim()], (err2, row) => {
-            if (err2 || !row) return reject(err2 || new Error('User not found'));
-            const token = jwt.sign(row, jwtSecret, { expiresIn: '7d' });
-            res.cookie('token', token, { httpOnly: true });
-            resolve();
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.serialize(() => {
+          usersDB.run('INSERT OR IGNORE INTO users (name) VALUES (?)', [name.trim()], function (err) {
+            if (err) return reject(err);
+            usersDB.get('SELECT id, name FROM users WHERE name = ?', [name.trim()], (err2, row) => {
+              if (err2 || !row) return reject(err2 || new Error('User not found'));
+              const token = jwt.sign(row, jwtSecret, { expiresIn: '7d' });
+              res.cookie('token', token, { httpOnly: true });
+              resolve();
+            });
           });
         });
       });

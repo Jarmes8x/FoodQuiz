@@ -1,13 +1,15 @@
-const usersDB = require('../database/dbConfig');
+const { usersDB, executeWithRetry } = require('../database/dbConfig');
 
 // ฟังก์ชันสำหรับซื้อวัตถุดิบ
 const buyIngredient = async (roomId, userId, ingredient) => {
   try {
     // ดึงแต้มและวัตถุดิบปัจจุบัน
-    const playerData = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT score, ingredients FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    const playerData = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT score, ingredients FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
     });
 
@@ -24,10 +26,12 @@ const buyIngredient = async (roomId, userId, ingredient) => {
     }
 
     // ดึงราคาวัตถุดิบจากฐานข้อมูล
-    const ingredientData = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT price FROM ingredient WHERE name = ?', [ingredient], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    const ingredientData = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT price FROM ingredient WHERE name = ?', [ingredient], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
     });
 
@@ -43,19 +47,23 @@ const buyIngredient = async (roomId, userId, ingredient) => {
 
     // เพิ่มวัตถุดิบและหักแต้ม
     ingredients.push(ingredient);
-    await new Promise((resolve, reject) => {
-      usersDB.run('UPDATE room_players SET score = score - ?, ingredients = ? WHERE room_id = ? AND user_id = ?', 
-        [price, JSON.stringify(ingredients), roomId, userId], (err) => {
-        if (err) reject(err);
-        else resolve();
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('UPDATE room_players SET score = score - ?, ingredients = ? WHERE room_id = ? AND user_id = ?', 
+          [price, JSON.stringify(ingredients), roomId, userId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
     });
 
     // ดึงข้อมูลล่าสุด
-    const updatedData = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT score, ingredients, food FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    const updatedData = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT score, ingredients, food FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
     });
 
@@ -76,10 +84,12 @@ const buyIngredient = async (roomId, userId, ingredient) => {
 const randomFood = async (roomId, userId) => {
   try {
     // ดึงวัตถุดิบของผู้เล่น
-    const playerData = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT ingredients FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    const playerData = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT ingredients FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
       });
     });
 
@@ -95,10 +105,12 @@ const randomFood = async (roomId, userId) => {
     }
 
     // ดึงสูตรอาหารและวัตถุดิบที่สัมพันธ์กัน
-    const recipes = await new Promise((resolve, reject) => {
-      usersDB.all('SELECT meal.id as meal_id, meal.name as meal_name, GROUP_CONCAT(meal_ingredient.ingredient) as reqs FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows || []);
+    const recipes = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.all('SELECT meal.id as meal_id, meal.name as meal_name, GROUP_CONCAT(meal_ingredient.ingredient) as reqs FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
       });
     });
 
@@ -116,26 +128,18 @@ const randomFood = async (roomId, userId) => {
     }
 
     // อัปเดตอาหารในฐานข้อมูล
-    await new Promise((resolve, reject) => {
-      usersDB.run('UPDATE room_players SET food = ? WHERE room_id = ? AND user_id = ?', [food, roomId, userId], (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    // ดึงข้อมูลล่าสุด
-    const updatedData = await new Promise((resolve, reject) => {
-      usersDB.get('SELECT score, ingredients, food FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('UPDATE room_players SET food = ? WHERE room_id = ? AND user_id = ?', [food, roomId, userId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
     });
 
     return {
       userId,
-      points: updatedData.score,
-      ingredients: JSON.parse(updatedData.ingredients || '[]'),
-      food: updatedData.food
+      food: food
     };
 
   } catch (error) {

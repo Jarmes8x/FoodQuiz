@@ -14,7 +14,7 @@ const expressLayouts = require("express-ejs-layouts");
 const bodyParser = require('body-parser');
 const authenticateJWT = require('./src/middleware/jwtAuth');
 const cookieParser = require('cookie-parser');
-const usersDB = require('./src/database/dbConfig');
+const { usersDB } = require('./src/database/dbConfig');
 
 const app = express();
 const PORT = process.env.PORT || 3000;

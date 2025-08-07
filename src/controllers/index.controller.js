@@ -1,4 +1,4 @@
-const usersDB = require("../database/dbConfig");
+const { usersDB, executeWithRetry } = require("../database/dbConfig");
 
 exports.home = (req, res) => {
   try {
@@ -27,18 +27,34 @@ exports.dashboard = (req, res) => {
       return res.redirect('/');
     }
     // ดึงข้อมูลห้องทั้งหมดเพื่อให้ quiz.ejs ใช้งานได้
-    usersDB.all('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id ORDER BY rooms.created_at DESC', [], (errRooms, rooms) => {
-      usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
-        if (err) {
-          console.error('Dashboard DB error:', err);
-          users = [];
-        }
-        locals.user = req.user;
-        locals.users = users;
-        locals.rooms = rooms || [];
-        locals.error = null;
-        res.render('dashboard', locals);
+    executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.all('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id ORDER BY rooms.created_at DESC', [], (errRooms, rooms) => {
+          if (errRooms) reject(errRooms);
+          else {
+            executeWithRetry(async () => {
+              return new Promise((resolve2, reject2) => {
+                usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
+                  if (err) {
+                    console.error('Dashboard DB error:', err);
+                    users = [];
+                  }
+                  locals.user = req.user;
+                  locals.users = users;
+                  locals.rooms = rooms || [];
+                  locals.error = null;
+                  res.render('dashboard', locals);
+                  resolve2();
+                });
+              });
+            });
+            resolve();
+          }
+        });
       });
+    }).catch(err => {
+      console.error('Dashboard error:', err);
+      res.status(500).render('dashboard', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
     });
   } catch (err) {
     console.error('Dashboard error:', err);
@@ -444,46 +460,65 @@ exports.profileUpdate = (req, res) => {
         req.user.name = trimmedName;
         
         // ดึงสถิติใหม่
-        usersDB.get(`
-          SELECT 
-            COUNT(DISTINCT rp.room_id) as totalGames,
-            COALESCE(SUM(rp.score), 0) as totalScore,
-            COALESCE(AVG(rp.score), 0) as averageScore,
-            COUNT(DISTINCT r.id) as roomsCreated
-          FROM users u
-          LEFT JOIN room_players rp ON u.id = rp.user_id
-          LEFT JOIN rooms r ON u.id = r.creator_id
-          WHERE u.id = ?
-        `, [userId], (err3, stats) => {
-          if (err3) {
-            console.error('Profile stats error:', err3);
-            stats = { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
-          }
-          
-          // ดึงกิจกรรมล่าสุด
-          usersDB.all(`
-            SELECT 
-              'เล่นเกมในห้อง ' || r.name as description,
-              rp.created_at
-            FROM room_players rp
-            JOIN rooms r ON rp.room_id = r.id
-            WHERE rp.user_id = ?
-            ORDER BY rp.created_at DESC
-            LIMIT 5
-          `, [userId], (err4, recentActivity) => {
-            if (err4) {
-              console.error('Recent activity error:', err4);
-              recentActivity = [];
-            }
-            
-            res.render('profile', {
-              success: 'อัปเดตข้อมูลเรียบร้อยแล้ว',
-              layout: 'layouts/main',
-              user: req.user,
-              stats: stats || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-              recentActivity: recentActivity || [],
-              error: null
+        executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.get(`
+              SELECT 
+                COUNT(DISTINCT rp.room_id) as totalGames,
+                COALESCE(SUM(rp.score), 0) as totalScore,
+                COALESCE(AVG(rp.score), 0) as averageScore,
+                COUNT(DISTINCT r.id) as roomsCreated
+              FROM users u
+              LEFT JOIN room_players rp ON u.id = rp.user_id
+              LEFT JOIN rooms r ON u.id = r.creator_id
+              WHERE u.id = ?
+            `, [userId], (err3, stats) => {
+              if (err3) {
+                console.error('Profile stats error:', err3);
+                stats = { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
+              }
+              
+              // ดึงกิจกรรมล่าสุด
+              executeWithRetry(async () => {
+                return new Promise((resolve2, reject2) => {
+                  usersDB.all(`
+                    SELECT 
+                      'เล่นเกมในห้อง ' || r.name as description,
+                      rp.created_at
+                    FROM room_players rp
+                    JOIN rooms r ON rp.room_id = r.id
+                    WHERE rp.user_id = ?
+                    ORDER BY rp.created_at DESC
+                    LIMIT 5
+                  `, [userId], (err4, recentActivity) => {
+                    if (err4) {
+                      console.error('Recent activity error:', err4);
+                      recentActivity = [];
+                    }
+                    
+                    res.render('profile', {
+                      success: 'อัปเดตข้อมูลเรียบร้อยแล้ว',
+                      layout: 'layouts/main',
+                      user: req.user,
+                      stats: stats || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
+                      recentActivity: recentActivity || [],
+                      error: null
+                    });
+                    resolve2();
+                  });
+                });
+              });
+              resolve();
             });
+          });
+        }).catch(err => {
+          console.error('Profile update error:', err);
+          res.status(500).render('profile', {
+            error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+            layout: 'layouts/main',
+            user: req.user,
+            stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
+            recentActivity: []
           });
         });
       });
