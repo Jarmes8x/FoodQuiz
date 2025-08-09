@@ -4,11 +4,11 @@ let answered = false;
 let startTime = null;
 
 // ตัวแปรสำหรับเก็บสถานะเกม - รวมจากไฟล์แรก
-let currentPlayerScore = 0;
+let currentPlayerScore = window.initialPlayerScore || 0;
 let playerIngredients = [];
 
 // สำหรับวัตถุดิบและอาหาร
-let myPoints = 0;
+let myPoints = window.initialPlayerScore || 0;
 let myIngredients = [];
 let myFood = '';
 
@@ -71,6 +71,23 @@ function buyIngredient(ingredientName) {
   const priceMatch = buttonText.match(/\((\d+) แต้ม\)/);
   const price = priceMatch ? parseInt(priceMatch[1]) : 0;
   
+  // ตรวจสอบว่า currentPlayerScore เป็นตัวเลขที่ถูกต้อง
+  if (isNaN(currentPlayerScore) || currentPlayerScore === undefined) {
+    currentPlayerScore = myPoints || 0;
+  }
+  
+  // ตรวจสอบว่า price เป็นตัวเลขที่ถูกต้อง
+  if (isNaN(price) || price <= 0) {
+    console.error('Invalid price:', price, 'from button text:', buttonText);
+    Swal.fire({
+      title: 'เกิดข้อผิดพลาด!',
+      text: 'ไม่สามารถอ่านราคาวัตถุดิบได้',
+      icon: 'error',
+      confirmButtonText: 'ตกลง'
+    });
+    return;
+  }
+  
   // ตรวจสอบคะแนนก่อนซื้อ
   if (currentPlayerScore < price) {
     Swal.fire({
@@ -95,9 +112,38 @@ function buyIngredient(ingredientName) {
     cancelButtonColor: '#ef4444'
   }).then((result) => {
     if (result.isConfirmed) {
-      socket.emit('buy-ingredient', {
+      // อัปเดตคะแนนทันทีแบบ realtime
+      const newScore = currentPlayerScore - price;
+      
+      // ตรวจสอบว่าผลลัพธ์เป็นตัวเลขที่ถูกต้อง
+      if (isNaN(newScore)) {
+        console.error('NaN detected in score calculation:', {
+          currentPlayerScore,
+          price,
+          newScore
+        });
+        return;
+      }
+      
+      currentPlayerScore = newScore;
+      myPoints = currentPlayerScore;
+      
+      // อัปเดต UI ทันที
+      const myPointsEl = document.getElementById('my-points');
+      if (myPointsEl) {
+        myPointsEl.textContent = currentPlayerScore;
+      }
+      
+      // อัปเดตคะแนนในรายชื่อผู้เล่นถ้ามี
+      const scoreEl = document.getElementById(`score-${user.id}`);
+      if (scoreEl) {
+        scoreEl.textContent = currentPlayerScore;
+      }
+      
+      socket.emit('buy_ingredient', {
         roomId: window.roomId || roomId,
-        ingredientName: ingredientName
+        userId: user.id,
+        ingredient: ingredientName
       });
     }
   });
@@ -326,10 +372,19 @@ function updateMyShopUI() {
 
 socket.on('update_points_ingredients', data => {
   if (data.userId === user.id) {
-    myPoints = data.points;
+    // ป้องกัน undefined และ NaN
+    const newPoints = typeof data.points === 'number' && !isNaN(data.points) ? data.points : currentPlayerScore;
+    
+    myPoints = newPoints;
     myIngredients = data.ingredients || [];
-    currentPlayerScore = data.points; // ซิงค์ค่า
+    currentPlayerScore = newPoints; // ซิงค์ค่า
     playerIngredients = data.ingredients || []; // ซิงค์ค่า
+    
+    console.log('Update points/ingredients:', {
+      points: newPoints,
+      ingredients: data.ingredients,
+      food: data.food
+    });
     
     // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
     if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
@@ -496,7 +551,7 @@ function enableIngredientShop() {
   document.querySelectorAll('.ingredient-btn').forEach(btn => {
     btn.onclick = () => {
       const ing = btn.getAttribute('data-ingredient');
-      socket.emit('buy_ingredient', { roomId, userId: user.id, ingredient: ing });
+      buyIngredient(ing); // ใช้ฟังก์ชัน buyIngredient แทนเพื่อให้มี realtime update
     };
   });
   document.getElementById('random-food-btn').onclick = () => {
@@ -619,6 +674,10 @@ socket.on('select_questions', function (questions) {
         <div class="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium self-start sm:self-auto">
           เลือก <span id="selected-count">0</span>/14 ข้อ
         </div>
+        <button id="random-select-btn" class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-2 rounded-lg text-sm transition-colors duration-200 flex items-center gap-2">
+          <i class="fa-solid fa-dice"></i>
+          สุ่มเลือก 14 ข้อ
+        </button>
       </div>
       
       <div id="question-select-alert" class="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 font-medium text-sm hidden">
@@ -635,7 +694,7 @@ socket.on('select_questions', function (questions) {
     questionsHtml += `
       <label class="question-card flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md">
         <div class="flex-shrink-0 mt-1">
-          <input type="checkbox" class="q-checkbox w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2" value="${q.rowid}">
+          <input type="checkbox" class="q-checkbox w-4 h-4 text-purple-600 bg-gray-100 border-gray-300 rounded focus:ring-purple-500 focus:ring-2" value="${q.id}">
         </div>
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 mb-1">
@@ -733,27 +792,61 @@ socket.on('select_questions', function (questions) {
       const alert14 = document.getElementById('question-select-alert');
       const selectedCount = document.getElementById('selected-count');
       
+      // ฟังก์ชันอัปเดต UI
+      const updateUI = () => {
+        const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
+        selectedCount.textContent = checkedCount;
+        
+        // อัปเดตสีของ counter
+        const counterElement = document.querySelector('.bg-purple-100, .bg-orange-100, .bg-green-100');
+        if (checkedCount === 14) {
+          counterElement.className = 'bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium';
+          alert14.classList.remove('hidden');
+          // เพิ่ม animation
+          alert14.style.animation = 'bounceIn 0.6s ease-out';
+        } else if (checkedCount >= 10) {
+          counterElement.className = 'bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium';
+          alert14.classList.add('hidden');
+        } else {
+          counterElement.className = 'bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium';
+          alert14.classList.add('hidden');
+        }
+      };
+
       checkboxes.forEach(cb => {
-        cb.addEventListener('change', () => {
-          const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
-          selectedCount.textContent = checkedCount;
-          
-          // อัปเดตสีของ counter
-          const counterElement = document.querySelector('.bg-purple-100');
-          if (checkedCount === 14) {
-            counterElement.className = 'bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium';
-            alert14.classList.remove('hidden');
-            // เพิ่ม animation
-            alert14.style.animation = 'bounceIn 0.6s ease-out';
-          } else if (checkedCount >= 10) {
-            counterElement.className = 'bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium';
-            alert14.classList.add('hidden');
-          } else {
-            counterElement.className = 'bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium';
-            alert14.classList.add('hidden');
-          }
-        });
+        cb.addEventListener('change', updateUI);
       });
+
+      // ปุ่มสุ่มเลือกคำถาม
+      const randomSelectBtn = document.getElementById('random-select-btn');
+      if (randomSelectBtn) {
+        randomSelectBtn.addEventListener('click', () => {
+          // ยกเลิกการเลือกทั้งหมดก่อน
+          checkboxes.forEach(cb => cb.checked = false);
+          
+          // สุ่มเลือก 14 ข้อ
+          const allCheckboxes = Array.from(checkboxes);
+          const shuffled = allCheckboxes.sort(() => 0.5 - Math.random());
+          const selected = shuffled.slice(0, 14);
+          
+          // เลือกคำถามที่สุ่มได้
+          selected.forEach(cb => cb.checked = true);
+          
+          // อัปเดต UI
+          updateUI();
+          
+          // แสดง animation ที่ปุ่มสุ่ม
+          randomSelectBtn.innerHTML = '<i class="fa-solid fa-check"></i> สุ่มเสร็จแล้ว!';
+          randomSelectBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+          randomSelectBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+          
+          setTimeout(() => {
+            randomSelectBtn.innerHTML = '<i class="fa-solid fa-dice"></i> สุ่มเลือก 14 ข้อ';
+            randomSelectBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+            randomSelectBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+          }, 2000);
+        });
+      }
     },
     preConfirm: () => {
       const checked = Array.from(document.querySelectorAll('.q-checkbox:checked')).map(cb => parseInt(cb.value));
@@ -807,64 +900,11 @@ socket.on('game_questions', function (selectedQuestions) {
       showSummary();
       return;
     }
-    showCountdown(20, () => {
-      showQuestionWithTimer(15, () => {
-        showAnswer();
-        setTimeout(() => {
-          currentQuestion++;
-          runGame();
-        }, 3000); // แสดงเฉลย 3 วินาที
-      });
-    });
+    // เริ่มคำถามทันทีโดยไม่มี countdown
+    showQuestion();
   }
 
-  // แสดงคำถามพร้อมจับเวลา (15 วินาที)
-  function showQuestionWithTimer(seconds, onFinish) {
-    const q = questions[currentQuestion];
-    if (!q) return;
-    const gameArea = document.getElementById('game-area');
-    let timeLeft = seconds;
-    gameArea.innerHTML = `
-      <div class="mb-4">
-        <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion + 1}: ${q.question_text}</div>
-        <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
-        <div class="text-lg text-purple-700 font-bold mb-2">เวลาที่เหลือ: <span id='question-timer'>${timeLeft}</span> วินาที</div>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        ${[q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => `<button class='choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl' data-idx='${i}'>${c}</button>`).join('')}
-      </div>
-      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
-    `;
-    answered = false;
-    startTime = Date.now();
-    document.querySelectorAll('.choice-btn').forEach(btn => {
-      btn.onclick = () => {
-        if (answered) return;
-        answered = true;
-        const answerIdx = btn.getAttribute('data-idx');
-        const answerTime = Date.now() - startTime;
-        socket.emit('submit_answer', { 
-          roomId, 
-          userId: user.id, 
-          answerIndex: answerIdx, 
-          answerTime,
-          questionIndex: currentQuestion,
-          currentQuestion: questions[currentQuestion]
-        });
-        btn.classList.add('bg-green-300');
-      };
-    });
-    // จับเวลา
-    const timer = setInterval(() => {
-      timeLeft--;
-      const timerEl = document.getElementById('question-timer');
-      if (timerEl) timerEl.textContent = timeLeft;
-      if (timeLeft <= 0) {
-        clearInterval(timer);
-        if (typeof onFinish === 'function') onFinish();
-      }
-    }, 1000);
-  }
+
 
   // แสดงเฉลยคำตอบ
   function showAnswer() {
@@ -900,20 +940,7 @@ socket.on('game_questions', function (selectedQuestions) {
     html += '</ol>';
     document.getElementById('game-area').innerHTML = html;
   }
-  // ฟังก์ชั่นนับถอยหลัง
-  function showCountdown(seconds, onFinish) {
-    const gameArea = document.getElementById('game-area');
-    let timeLeft = seconds;
-    gameArea.innerHTML = `<div class="text-3xl font-bold text-purple-700 mb-4">เกมจะเริ่มใน <span id='countdown-timer'>${timeLeft}</span> วินาที</div>`;
-    const timer = setInterval(() => {
-      timeLeft--;
-      document.getElementById('countdown-timer').textContent = timeLeft;
-      if (timeLeft <= 0) {
-        clearInterval(timer);
-        if (typeof onFinish === 'function') onFinish();
-      }
-    }, 1000);
-  }
+
 
   // ฟังก์ชั่นสุ่ม array (Fisher-Yates)
   function shuffleArray(array) {
@@ -961,6 +988,9 @@ socket.on('next_question', () => {
   showQuestion();
 });
 
+// ตัวแปรเก็บ timer เพื่อ clear ได้
+let currentQuestionTimer = null;
+
 // Show question with timer
 function showQuestion() {
   const q = questions[currentQuestion];
@@ -968,6 +998,12 @@ function showQuestion() {
     // ถ้าไม่มีคำถามแล้ว ให้แสดงสรุป
     showSummary();
     return;
+  }
+  
+  // ล้าง timer เก่าก่อน (ถ้ามี)
+  if (currentQuestionTimer) {
+    clearInterval(currentQuestionTimer);
+    currentQuestionTimer = null;
   }
   
   let timeLeft = 20; // 20 วินาทีต่อข้อ
@@ -1003,7 +1039,7 @@ function showQuestion() {
   startQuestionTimeout();
   
   // จับเวลา
-  const timer = setInterval(() => {
+  currentQuestionTimer = setInterval(() => {
     timeLeft--;
     const timerEl = document.getElementById('question-timer');
     if (timerEl) {
@@ -1018,7 +1054,8 @@ function showQuestion() {
     }
     
     if (timeLeft <= 0) {
-      clearInterval(timer);
+      clearInterval(currentQuestionTimer);
+      currentQuestionTimer = null;
       endQuestion();
     }
   }, 1000);
@@ -1084,7 +1121,8 @@ function showQuestion() {
       if (answered || selectedAnswerIdx !== null || questionEnded) return;
       
       answered = true;
-      clearInterval(timer); // หยุดจับเวลา
+      clearInterval(currentQuestionTimer); // หยุดจับเวลา
+      currentQuestionTimer = null;
       
       selectedAnswerIdx = parseInt(btn.getAttribute('data-idx'));
       const answerTime = Date.now() - startTime;
@@ -1172,6 +1210,11 @@ function clearQuestionTimeout() {
   if (questionTimeout) {
     clearTimeout(questionTimeout);
     questionTimeout = null;
+  }
+  // Clear timer หลักด้วย
+  if (currentQuestionTimer) {
+    clearInterval(currentQuestionTimer);
+    currentQuestionTimer = null;
   }
 }
 
@@ -1337,4 +1380,16 @@ function showSummary() {
   
   gameArea.innerHTML = html;
 }
+
+// Initialize scores when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+  // อัปเดตคะแนนเริ่มต้นใน UI
+  const myPointsEl = document.getElementById('my-points');
+  if (myPointsEl) {
+    myPointsEl.textContent = currentPlayerScore;
+  }
+  
+  console.log('Initial player score:', currentPlayerScore);
+  console.log('Initial myPoints:', myPoints);
+});
 

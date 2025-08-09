@@ -137,9 +137,21 @@ const randomFood = async (roomId, userId) => {
       });
     });
 
+    // ดึงข้อมูลปัจจุบันของผู้เล่นรวมถึงคะแนน
+    const updatedData = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT score, ingredients, food FROM room_players WHERE room_id = ? AND user_id = ?', [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    });
+
     return {
       userId,
-      food: food
+      points: updatedData.score,
+      ingredients: JSON.parse(updatedData.ingredients || '[]'),
+      food: updatedData.food
     };
 
   } catch (error) {

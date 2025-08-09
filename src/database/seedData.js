@@ -21,16 +21,16 @@ const ingredients = [
 
 // ข้อมูลสูตรอาหารตัวอย่าง
 const meals = [
-  { name: 'กะเพราหมูสับ', description: 'กะเพราหมูสับแบบไทยแท้' },
-  { name: 'ข้าวผัดรถไฟ', description: 'ข้าวผัดรถไฟรสชาติเข้มข้น' },
-  { name: 'ส้มตำ', description: 'ส้มตำไทยรสชาติเปรี้ยวหวาน' },
-  { name: 'ผัดเปรี้ยวหวาน', description: 'ผัดเปรี้ยวหวานหมูสับ' },
-  { name: 'แกงจืดหมูสับ', description: 'แกงจืดหมูสับผักบุ้ง' },
-  { name: 'หมูสับผัดไข่', description: 'หมูสับผัดไข่แบบไทย' },
-  { name: 'ไข่ตุ๋นกุ้ง', description: 'ไข่ตุ๋นกุ้งนุ่มนวล' },
-  { name: 'น้ำพริกอ่องหมูสับ', description: 'น้ำพริกอ่องหมูสับ' },
-  { name: 'ยำกุ้งสุก', description: 'ยำกุ้งสุกรสชาติแซ่บ' },
-  { name: 'ไข่เจียวทรงเครื่อง', description: 'ไข่เจียวทรงเครื่องแบบไทย' }
+  { name: 'กะเพราหมูสับ', description: 'กะเพราหมูสับแบบไทยแท้', image_file: '1.png' },
+  { name: 'ข้าวผัดรถไฟ', description: 'ข้าวผัดรถไฟรสชาติเข้มข้น', image_file: '2.png' },
+  { name: 'ส้มตำ', description: 'ส้มตำไทยรสชาติเปรี้ยวหวาน', image_file: '3.png' },
+  { name: 'ผัดเปรี้ยวหวาน', description: 'ผัดเปรี้ยวหวานหมูสับ', image_file: '4.png' },
+  { name: 'แกงจืดหมูสับ', description: 'แกงจืดหมูสับผักบุ้ง', image_file: '5.png' },
+  { name: 'หมูสับผัดไข่', description: 'หมูสับผัดไข่แบบไทย', image_file: '6.png' },
+  { name: 'ไข่ตุ๋นกุ้ง', description: 'ไข่ตุ๋นกุ้งนุ่มนวล', image_file: '7.png' },
+  { name: 'น้ำพริกอ่องหมูสับ', description: 'น้ำพริกอ่องหมูสับ', image_file: '8.png' },
+  { name: 'ยำกุ้งสุก', description: 'ยำกุ้งสุกรสชาติแซ่บ', image_file: '9.png' },
+  { name: 'ไข่เจียวทรงเครื่อง', description: 'ไข่เจียวทรงเครื่องแบบไทย', image_file: '10.png' }
 ];
 
 // ข้อมูลความสัมพันธ์ระหว่างอาหารและวัตถุดิบ (สูตรอาหารจริง)
@@ -49,67 +49,110 @@ const mealIngredients = [
 
 // ฟังก์ชันเพิ่มข้อมูลวัตถุดิบ
 const seedIngredients = () => {
-  ingredients.forEach(ingredient => {
-const seedIngredients = () => {
-  usersDB.serialize(() => {
-    ingredients.forEach(ingredient => {
-      usersDB.run('INSERT OR IGNORE INTO ingredient (name, price, image_file) VALUES (?, ?, ?)', 
-        [ingredient.name, ingredient.price, ingredient.image_file], (err) => {
-        if (err) {
-          console.error('Error seeding ingredient:', err);
-        } 
+  return new Promise((resolve, reject) => {
+    const { usersDB } = require('./dbConfig');
+    usersDB.serialize(() => {
+      let completed = 0;
+      const total = ingredients.length;
+      
+      ingredients.forEach(ingredient => {
+        usersDB.run('INSERT OR IGNORE INTO ingredient (name, price, image_file) VALUES (?, ?, ?)', 
+          [ingredient.name, ingredient.price, ingredient.image_file], function(err) {
+          if (err) {
+            console.error('Error seeding ingredient:', err);
+            reject(err);
+          } else {
+            console.log(`✓ Inserted ingredient: ${ingredient.name}`);
+            completed++;
+            if (completed === total) {
+              resolve();
+            }
+          }
+        });
       });
     });
-  });
-};
   });
 };
 
 // ฟังก์ชันเพิ่มข้อมูลสูตรอาหาร
 const seedMeals = () => {
-const seedMeals = () => {
-  usersDB.serialize(() => {
-    meals.forEach(meal => {
-      usersDB.run('INSERT OR IGNORE INTO meal (name, description) VALUES (?, ?)', 
-        [meal.name, meal.description], function(err) {
-        if (err) {
-          console.error('Error seeding meal:', err);
-        } else {
-          // เพิ่มความสัมพันธ์ระหว่างอาหารและวัตถุดิบ
-          const mealId = this.lastID;
-          mealIngredients.forEach(mi => {
-            if (mi.meal === meal.name) {
-              mi.ingredients.forEach(ingredient => {
+  return new Promise((resolve, reject) => {
+    const { usersDB } = require('./dbConfig');
+    usersDB.serialize(() => {
+      let completed = 0;
+      const total = meals.length;
+      
+      meals.forEach(meal => {
+        usersDB.run('INSERT OR IGNORE INTO meal (name, description, image_file) VALUES (?, ?, ?)', 
+          [meal.name, meal.description, meal.image_file], function(err) {
+          if (err) {
+            console.error('Error seeding meal:', err);
+            reject(err);
+          } else {
+            console.log(`✓ Inserted meal: ${meal.name}`);
+            // เพิ่มความสัมพันธ์ระหว่างอาหารและวัตถุดิบ
+            const mealId = this.lastID;
+            const mealIngredient = mealIngredients.find(mi => mi.meal === meal.name);
+            
+            if (mealIngredient) {
+              let ingredientCompleted = 0;
+              const totalIngredients = mealIngredient.ingredients.length;
+              
+              mealIngredient.ingredients.forEach(ingredient => {
                 usersDB.run('INSERT OR IGNORE INTO meal_ingredient (meal_id, ingredient) VALUES (?, ?)', 
                   [mealId, ingredient], (err2) => {
                   if (err2) {
                     console.error('Error seeding meal_ingredient:', err2);
+                  } else {
+                    console.log(`  ✓ Added ingredient ${ingredient} to ${meal.name}`);
+                  }
+                  
+                  ingredientCompleted++;
+                  if (ingredientCompleted === totalIngredients) {
+                    completed++;
+                    if (completed === total) {
+                      resolve();
+                    }
                   }
                 });
               });
+            } else {
+              completed++;
+              if (completed === total) {
+                resolve();
+              }
             }
-          });
-        }
+          }
+        });
       });
     });
   });
 };
-};
 
 // ฟังก์ชันหลักสำหรับเพิ่มข้อมูลตัวอย่าง
-const seedDatabase = () => {
-  console.log('Starting database seeding...');
+const seedDatabase = async () => {
+  console.log('🌱 Starting database seeding...');
   
-  // เพิ่มข้อมูลวัตถุดิบ
-  seedIngredients();
-  
-  // เพิ่มข้อมูลสูตรอาหาร
-  seedMeals();
-  
-  console.log('Database seeding completed!');
+  try {
+    // เพิ่มข้อมูลวัตถุดิบ
+    console.log('📦 Seeding ingredients...');
+    await seedIngredients();
+    console.log('✅ Ingredients seeded successfully!');
+    
+    // เพิ่มข้อมูลสูตรอาหาร
+    console.log('🍽️  Seeding meals...');
+    await seedMeals();
+    console.log('✅ Meals seeded successfully!');
+    
+    console.log('🎉 Database seeding completed!');
+  } catch (error) {
+    console.error('❌ Error during database seeding:', error);
+  }
 };
 
-// เรียกใช้ฟังก์ชันเพิ่มข้อมูลตัวอย่าง
-seedDatabase();
+// เรียกใช้ฟังก์ชันเพิ่มข้อมูลตัวอย่าง (ถ้าไฟล์นี้รันโดยตรง)
+if (require.main === module) {
+  seedDatabase();
+}
 
-module.exports = { seedDatabase }; 
+module.exports = { seedDatabase, seedIngredients, seedMeals }; 

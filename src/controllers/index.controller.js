@@ -180,13 +180,17 @@ exports.gameRoomPage = (req, res) => {
       usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err2, players) => {
         if (err2) players = [];
         // ดึงคำถามทั้งหมดของห้องนี้
-        usersDB.all('SELECT * FROM questions WHERE room_id = ?', [roomId], (err3, questions) => {
+        usersDB.all(`
+          SELECT q.* FROM questions q 
+          JOIN room_questions rq ON q.id = rq.question_id 
+          WHERE rq.room_id = ?
+        `, [roomId], (err3, questions) => {
           if (err3) questions = [];
           // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient
           usersDB.all('SELECT name, price, image_file FROM ingredient', [], (err4, ingredients) => {
             if (err4) ingredients = [];
             // ดึงสูตรอาหารและวัตถุดิบที่สัมพันธ์กัน
-            usersDB.all('SELECT meal.name as meal_name, GROUP_CONCAT(meal_ingredient.ingredient) as ingredients FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err5, mealIngredients) => {
+            usersDB.all('SELECT meal.name as meal_name, meal.image_file, GROUP_CONCAT(meal_ingredient.ingredient) as ingredients FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err5, mealIngredients) => {
               if (err5) mealIngredients = [];
               // ดึงอาหารที่สุ่มได้ของผู้เล่นในห้องนี้
               usersDB.all(`
@@ -308,19 +312,22 @@ exports.deleteRoom = (req, res) => {
       // ลบห้องและข้อมูลที่เกี่ยวข้อง
       usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err1) => {
         if (err1) console.error('Delete room_players error:', err1);
-        usersDB.run('DELETE FROM questions WHERE room_id = ?', [roomId], (err2) => {
-          if (err2) console.error('Delete questions error:', err2);
-          usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err3) => {
-            if (err3) {
-              console.error('Delete room error:', err3);
-              return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
-            }
-            // --- Notify all users in the room via socket.io ---
-            const io = req.app.get('io');
-            if (io) {
-              io.to(`room_${roomId}`).emit('room_deleted', { message: 'ห้องนี้ถูกลบโดยเจ้าของห้อง' });
-            }
-            res.json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
+        usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err2) => {
+          if (err2) console.error('Delete room_questions error:', err2);
+          usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err3) => {
+            if (err3) console.error('Delete player_foods error:', err3);
+            usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err4) => {
+              if (err4) {
+                console.error('Delete room error:', err4);
+                return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
+              }
+              // --- Notify all users in the room via socket.io ---
+              const io = req.app.get('io');
+              if (io) {
+                io.to(`room_${roomId}`).emit('room_deleted', { message: 'ห้องนี้ถูกลบโดยเจ้าของห้อง' });
+              }
+              res.json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
+            });
           });
         });
       });

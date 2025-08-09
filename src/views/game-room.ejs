@@ -5,6 +5,11 @@
   window.questions = <%- JSON.stringify(questions) %>;
   window.roomId = "<%= room.id %>";
   window.playerFoods = <%- JSON.stringify(playerFoods || {}) %>;
+  <% 
+    const currentPlayer = players.find(p => p.id === user.id);
+    const currentPlayerScore = currentPlayer ? currentPlayer.score : 0;
+  %>
+  window.initialPlayerScore = <%= currentPlayerScore %>;
 </script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
@@ -133,49 +138,14 @@
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     <% if (typeof mealIngredients !== 'undefined' && Array.isArray(mealIngredients) && mealIngredients.length > 0) { %>
       <% 
-        // Map meal name to image index - ใช้รูปเดียวกับวัตถุดิบหลัก
-        const mealImgMap = {
-          'กะเพราะหมูสับ': 1,
-          'ข้าวผัดรถไฟ': 2,
-          'ส้มตำ': 3,
-          'ผัดเปรี้ยวหวาน': 4,
-          'แกงจืดหมูสับ': 5,
-          'หมูสับผัดไข่': 6,
-          'ไข่ตุ๋นกุ้ง': 7,
-          'น้ำพริกอ่องหมูสับ': 8,
-          'ยำกุ้งสุก': 9,
-          'ไข่เจียวทรงเครื่อง': 10,
-        };
+        // ใช้ image_file จากฐานข้อมูลโดยตรง
       %>
       
       <% mealIngredients.forEach(function(meal) { %>
         <div class="bg-green-50 rounded-xl p-4 flex flex-col items-center shadow border border-green-100 hover:bg-green-100 transition-colors duration-200">
           <div class="w-20 h-20 bg-white rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-green-200">
-            <% 
-              // ลองหารูปจากชื่ออาหารโดยตรง หรือจากคำในชื่ออาหาร
-              let mealImgIndex = mealImgMap[meal.meal_name] || mealImgMap[meal.meal_name.trim()];
-              
-              // ถ้าไม่เจอ ลองหาจากคำในชื่ออาหาร
-              if (!mealImgIndex) {
-                Object.keys(mealImgMap).forEach(key => {
-                  if (meal.meal_name.includes(key) || key.includes(meal.meal_name)) {
-                    mealImgIndex = mealImgMap[key];
-                  }
-                });
-              }
-              
-              // ถ้ายังไม่เจอ ลองดูจากวัตถุดิบหลัก
-              if (!mealImgIndex && meal.ingredients) {
-                Object.keys(mealImgMap).forEach(key => {
-                  if (meal.ingredients.includes(key)) {
-                    mealImgIndex = mealImgMap[key];
-                  }
-                });
-              }
-            %>
-            
-            <% if (mealImgIndex) { %>
-              <img src="/img/<%= mealImgIndex %>.png" 
+            <% if (meal.image_file) { %>
+              <img src="/img/<%= meal.image_file %>" 
                    alt="<%= meal.meal_name %>" 
                    class="object-cover w-full h-full" 
                    loading="lazy"
@@ -186,7 +156,7 @@
                 <i class="fa-solid fa-utensils text-green-400 text-2xl"></i>
               </div>
             <% } else { %>
-              <!-- No image mapping found - show default icon -->
+              <!-- No image file found - show default icon -->
               <span class="text-4xl text-green-300">
                 <i class="fa-solid fa-utensils"></i>
               </span>

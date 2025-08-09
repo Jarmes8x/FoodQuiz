@@ -179,11 +179,34 @@ const setupRoomHandlers = (io, socket) => {
   // เมื่อเลือกคำถาม
   socket.on('questions_selected', async (roomId, selectedQuestionIds) => {
     try {
+      // ลบคำถามเก่าของห้องนี้ก่อน
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // เพิ่มคำถามใหม่ลงในตาราง room_questions
+      for (const questionId of selectedQuestionIds) {
+        await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.run('INSERT INTO room_questions (room_id, question_id) VALUES (?, ?)', 
+                       [roomId, questionId], (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      }
+
       // ดึงคำถามจากฐานข้อมูลตาม ID ที่เลือก
       const placeholders = selectedQuestionIds.map(() => '?').join(',');
       const questions = await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.all(`SELECT * FROM questions WHERE rowid IN (${placeholders})`, selectedQuestionIds, (err, rows) => {
+          usersDB.all(`SELECT * FROM questions WHERE id IN (${placeholders})`, selectedQuestionIds, (err, rows) => {
             if (err) reject(err);
             else resolve(rows || []);
           });
@@ -380,7 +403,7 @@ const setupRoomHandlers = (io, socket) => {
     try {
       const questions = await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.all('SELECT rowid, * FROM questions', [], (err, rows) => {
+          usersDB.all('SELECT id, * FROM questions', [], (err, rows) => {
             if (err) reject(err);
             else resolve(rows || []);
           });

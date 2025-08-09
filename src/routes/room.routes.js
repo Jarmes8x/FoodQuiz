@@ -25,24 +25,31 @@ router.delete('/room/:id', (req, res) => {
         return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบผู้เล่นในห้อง' });
       }
 
-      usersDB.run('DELETE FROM questions WHERE room_id = ?', [roomId], (err2) => {
+      usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err2) => {
         if (err2) {
-          console.error('Delete questions error:', err2);
+          console.error('Delete room_questions error:', err2);
           return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบคำถามในห้อง' });
         }
 
-        usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err3) => {
+        usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err3) => {
           if (err3) {
-            console.error('Delete room error:', err3);
-            return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
+            console.error('Delete player_foods error:', err3);
+            return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบข้อมูลอาหารในห้อง' });
           }
 
-          // แจ้งเตือนทุก client ในห้องนี้ผ่าน socket.io
-          if (io) {
-            io.to(`room_${roomId}`).emit('room_deleted');
-          }
+          usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err4) => {
+            if (err4) {
+              console.error('Delete room error:', err4);
+              return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
+            }
 
-          res.status(200).json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
+            // แจ้งเตือนทุก client ในห้องนี้ผ่าน socket.io
+            if (io) {
+              io.to(`room_${roomId}`).emit('room_deleted');
+            }
+
+            res.status(200).json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
+          });
         });
       });
     });

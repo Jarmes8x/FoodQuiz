@@ -68,7 +68,6 @@ usersDB.serialize(() => {
   usersDB.run(`
     CREATE TABLE IF NOT EXISTS questions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      room_id INTEGER NOT NULL,
       question_text TEXT NOT NULL,
       choice1 TEXT NOT NULL,
       choice2 TEXT NOT NULL,
@@ -76,11 +75,27 @@ usersDB.serialize(() => {
       choice4 TEXT NOT NULL,
       answer_index INTEGER NOT NULL, -- 0-3
       hint TEXT,
-      FOREIGN KEY (room_id) REFERENCES rooms(id)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
     if (err) {
       console.error("Error creating questions table:", err.message);
+    }
+  });
+
+  // Table: room_questions (ตารางใหม่สำหรับเก็บคำถามที่เลือกสำหรับแต่ละห้อง)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS room_questions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      question_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (question_id) REFERENCES questions(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating room_questions table:", err.message);
     }
   });
 
@@ -142,6 +157,7 @@ usersDB.serialize(() => {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
       description TEXT,
+      image_file TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {
