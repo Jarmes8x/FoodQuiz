@@ -11,7 +11,6 @@ const ingredients = [
   { name: 'กุ้ง', price: 5, image_file: '21.png' },
   { name: 'มะนาว', price: 4, image_file: '12.png' },
   { name: 'ต้นหอม', price: 2, image_file: '18.png' },
-  { name: 'หัวหอมใหญ่', price: 2, image_file: '13.png' },
   { name: 'ผักกาด', price: 2, image_file: '19.png' },
   { name: 'ฟักทอง', price: 6, image_file: '25.png' },
   { name: 'เห็ด', price: 6, image_file: '23.png' },
