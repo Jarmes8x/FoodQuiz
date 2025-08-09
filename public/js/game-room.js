@@ -1210,6 +1210,7 @@ socket.on('answer-question', ({ roomId, answer }) => {
   console.log('Answer received:', { roomId, answer });
 });
 
+
 // แสดงเฉลยคำตอบ (ปรับปรุงจากไฟล์เดิม)
 function showAnswer() {
   const q = questions[currentQuestion];
@@ -1336,3 +1337,4 @@ function showSummary() {
   
   gameArea.innerHTML = html;
 }
+
