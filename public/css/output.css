@@ -548,9 +548,6 @@
   .max-h-3 {
     max-height: calc(var(--spacing) * 3);
   }
-  .max-h-3\/4 {
-    max-height: calc(3/4 * 100%);
-  }
   .max-h-20 {
     max-height: calc(var(--spacing) * 20);
   }
@@ -559,15 +556,6 @@
   }
   .max-h-96 {
     max-height: calc(var(--spacing) * 96);
-  }
-  .max-h-\[412px\] {
-    max-height: 412px;
-  }
-  .max-h-\[480px\] {
-    max-height: 480px;
-  }
-  .max-h-\[512\] {
-    max-height: 512;
   }
   .max-h-\[512px\] {
     max-height: 512px;
