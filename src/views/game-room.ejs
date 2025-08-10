@@ -20,6 +20,7 @@
   %>
   window.initialPlayerScore = <%= currentPlayerScore %>;
   window.initialPlayerIngredients = <%- JSON.stringify(currentPlayerIngredients) %>;
+  window.ingredients = <%- JSON.stringify(ingredients || []) %>;
 </script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
@@ -59,21 +60,96 @@
       <% } %>
     </div>
   </div>
+
   <div class="bg-white rounded-2xl shadow p-6 mt-6">
-    <h3 class="text-lg font-semibold mb-2">คะแนน</h3>
-    <ul id="score-list">
-      <% players.forEach(function(player) { %>
-        <li class="mb-1 <%= player.is_owner ? 'font-bold text-purple-700' : '' %>"><i class="fa-solid fa-user"></i> <%= player.name %> <span class="ml-2 text-green-600 font-bold">+<span id="score-<%= player.id %>"><%= player.score %></span>></span></li>
-      <% }); %>
-    </ul>
+    <div class="mb-4">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 shadow">
+          <i class="fa-solid fa-bowl-food text-xl"></i>
+        </span>
+        <h4 class="text-xl font-extrabold text-green-800 tracking-tight drop-shadow">อาหารที่ได้รับ</h4>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% 
+          // แสดงเฉพาะอาหารที่ผู้เล่นได้รับ
+          const currentPlayerFoods = playerFoods[user.id] || [];
+          if (currentPlayerFoods.length > 0) {
+            // กรองเฉพาะอาหารที่มีใน playerFoods
+            const availableMeals = mealIngredients.filter(meal => 
+              currentPlayerFoods.includes(meal.meal_name)
+            );
+        %>
+          <% availableMeals.forEach(function(meal) { %>
+            <div class="bg-green-50 rounded-xl p-4 flex flex-col items-center shadow border border-green-100 hover:bg-green-100 transition-colors duration-200">
+              <div class="w-24 h-24 bg-white rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-green-200">
+                <% if (meal.image_file) { %>
+                  <img src="/img/<%= meal.image_file %>" 
+                       alt="<%= meal.meal_name %>" 
+                       class="object-cover w-full h-full" 
+                       loading="lazy"
+                       onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                  
+                  <!-- Fallback icon if image fails -->
+                  <div style="display:none;" class="flex items-center justify-center">
+                    <i class="fa-solid fa-utensils text-green-400 text-2xl"></i>
+                  </div>
+                <% } else { %>
+                  <!-- No image file found - show default icon -->
+                  <span class="text-4xl text-green-300">
+                    <i class="fa-solid fa-utensils"></i>
+                  </span>
+                <% } %>
+              </div>
+              
+              <div class="font-bold text-xl text-green-800 text-center mb-1"><%= meal.meal_name %></div>
+              <div class="text-gray-700 text-center mb-2">วัตถุดิบ: <%= meal.ingredients %></div>
+              
+              <!-- เพิ่มปุ่มสำหรับทำอาหาร -->
+              <button class="cook-meal-btn cursor-pointer mt-4 bg-green-500 hover:bg-green-600 text-white rounded-lg px-6 py-4 font-semibold transition-colors duration-200" 
+                      data-meal="<%= meal.meal_name %>" 
+                      data-ingredients="<%= meal.ingredients %>">
+                <i class="fa-solid fa-fire mr-1"></i>ทำอาหาร
+              </button>
+            </div>
+          <% }); %>
+        <% } else { %>
+          <div class="col-span-full text-center p-8 bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center">
+            <i class="fa-solid fa-utensils text-gray-400 text-4xl mb-4"></i>
+            <p class="text-gray-600 font-semibold">ยังไม่มีอาหารที่ได้รับ</p>
+            <p class="text-gray-500 text-sm mt-2">เล่นเกมเพื่อรับอาหารใหม่</p>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="mt-8">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 shadow">
+          <i class="fa-solid fa-leaf text-xl"></i>
+        </span>
+        <h4 class="text-xl font-extrabold text-green-800 tracking-tight drop-shadow">วัตถุดิบของคุณ</h4>
+      </div>
+      <div id="my-ingredients" class="flex flex-wrap gap-2 p-4 bg-green-50 rounded-xl border border-green-200 min-h-[60px]">
+        <span class="text-gray-500 italic">ยังไม่มี</span>
+      </div>
+    </div>
+
     <div id="ingredient-shop" class="mt-8">
-      <h3 class="text-lg font-semibold mb-2">ร้านขายวัตถุดิบ</h3>
-      <div class="mb-2">แต้มของคุณ: <span id="my-points">0</span></div>
+      <div class="flex flex-col sm:flex-row items-center justify-between mb-4">
+        <h3 class="text-2xl sm:mb-0 mb-4 font-extrabold text-yellow-700 flex items-center gap-2">
+          <i class="fa-solid fa-store text-yellow-500"></i>
+          ร้านขายวัตถุดิบ
+        </h3>
+        <div class="flex items-center gap-2 bg-yellow-100 border border-yellow-300 rounded-lg px-4 py-2 shadow-sm">
+          <span class="text-yellow-700 font-semibold text-lg"><i class="fa-solid fa-coins"></i> แต้มของคุณ:</span>
+          <span id="my-points" class="text-yellow-900 font-bold text-xl drop-shadow-sm">0</span>
+        </div>
+      </div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
         <% if (typeof ingredients !== 'undefined' && Array.isArray(ingredients) && ingredients.length > 0) { %>
           <% ingredients.forEach(function(ing) { %>
       <div class="flex flex-col items-center bg-yellow-50 rounded-xl p-2 shadow border border-yellow-100">
-        <div class="w-14 h-14 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
+        <div class="w-20 h-20 bg-white rounded-xl mb-1 flex items-center justify-center overflow-hidden border border-yellow-200">
           <% if (ing.image_file) { %>
             <img src="/img/<%= ing.image_file %>" 
                  alt="<%= ing.name %>" 
@@ -92,11 +168,17 @@
             </span>
           <% } %>
         </div>
-        
-        <button class="ingredient-btn bg-yellow-100 hover:bg-yellow-200 rounded-xl px-2 py-1 font-bold mt-1 w-full transition-colors duration-200" 
-                data-ingredient="<%= ing.name %>">
-          <%= ing.name %> (<%= ing.price %> แต้ม)
-        </button>
+        <div class="flex flex-col items-center w-full">
+          <span class="text-base font-semibold text-yellow-800 mb-1"><%= ing.name %></span>
+          <button class="ingredient-btn cursor-pointer flex items-center justify-center gap-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-900 font-bold px-3 py-4 rounded-xl mt-1 w-full shadow transition-all duration-200 border border-yellow-200"
+              data-ingredient="<%= ing.name %>"
+              data-price="<%= ing.price %>">
+            <span class="pointer-events-none flex items-center gap-2">
+              <i class="fa-solid fa-basket-shopping text-yellow-500"></i>
+              <span>ซื้อ <span class="font-bold"><%= ing.price %></span> แต้ม</span>
+            </span>
+          </button>
+        </div>
       </div>
     <% }); %>
     
@@ -144,80 +226,7 @@
   <% } %>
 </div>
 
-<div class="mb-4">
-  <h4 class="text-md font-bold mb-1 text-green-700">สูตรอาหารที่สามารถทำได้</h4>
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-    <% if (typeof mealIngredients !== 'undefined' && Array.isArray(mealIngredients) && mealIngredients.length > 0) { %>
-      <% 
-        // ใช้ image_file จากฐานข้อมูลโดยตรง
-      %>
-      
-      <% mealIngredients.forEach(function(meal) { %>
-        <div class="bg-green-50 rounded-xl p-4 flex flex-col items-center shadow border border-green-100 hover:bg-green-100 transition-colors duration-200">
-          <div class="w-20 h-20 bg-white rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-green-200">
-            <% if (meal.image_file) { %>
-              <img src="/img/<%= meal.image_file %>" 
-                   alt="<%= meal.meal_name %>" 
-                   class="object-cover w-full h-full" 
-                   loading="lazy"
-                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-              
-              <!-- Fallback icon if image fails -->
-              <div style="display:none;" class="flex items-center justify-center">
-                <i class="fa-solid fa-utensils text-green-400 text-2xl"></i>
-              </div>
-            <% } else { %>
-              <!-- No image file found - show default icon -->
-              <span class="text-4xl text-green-300">
-                <i class="fa-solid fa-utensils"></i>
-              </span>
-            <% } %>
-          </div>
-          
-          <div class="font-bold text-green-800 text-center mb-1"><%= meal.meal_name %></div>
-          <div class="text-gray-700 text-xs text-center mb-2">วัตถุดิบ: <%= meal.ingredients %></div>
-          
-          <!-- เพิ่มปุ่มสำหรับทำอาหาร -->
-          <button class="cook-meal-btn bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-1 text-xs font-semibold transition-colors duration-200" 
-                  data-meal="<%= meal.meal_name %>" 
-                  data-ingredients="<%= meal.ingredients %>">
-            <i class="fa-solid fa-fire mr-1"></i>ทำอาหาร
-          </button>
-        </div>
-      <% }); %>
-      
-    <% } else { %>
-          <button disabled class="bg-gray-200 rounded-xl px-4 py-2 font-bold">ไม่มีข้อมูลวัตถุดิบ</button>
-      </div>
-    <% } %>
-      <div class="mt-8 flex flex-col items-center">
-        <div class="w-full max-w-md flex flex-col gap-2 items-start">
-          <div class="mb-1 text-base font-semibold">วัตถุดิบของคุณ: <span id="my-ingredients"></span></div>
-          <div class="mb-1 text-base font-semibold">อาหารที่คุณได้รับ: <span id="my-food" class="font-bold text-purple-700"></span></div>
-        </div>
-        
-        <!-- แสดงอาหารที่สุ่มได้เมื่อเข้าห้อง -->
-        <div class="mt-6 w-full max-w-md">
-          <h4 class="text-lg font-bold mb-3 text-center text-purple-700">อาหารที่คุณได้รับเมื่อเข้าห้อง</h4>
-          <div id="my-assigned-foods" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <% if (playerFoods[user.id] && playerFoods[user.id].length > 0) { %>
-              <% playerFoods[user.id].forEach(function(food) { %>
-                <div class="bg-purple-100 rounded-xl p-3 text-center border border-purple-200">
-                  <i class="fa-solid fa-utensils text-purple-600 text-xl mb-2"></i>
-                  <div class="font-semibold text-purple-800"><%= food %></div>
-                </div>
-              <% }); %>
-            <% } else { %>
-              <div class="col-span-full text-center text-gray-500 py-4">
-                <i class="fa-solid fa-clock text-2xl mb-2"></i>
-                <div>กำลังสุ่มอาหาร...</div>
-              </div>
-            <% } %>
-          </div>
-        </div>
-      </div>
-  </div>
-</div>
+
 </div>
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/game-room.js"></script>

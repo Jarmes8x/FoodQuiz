@@ -67,9 +67,8 @@ function buyIngredient(ingredientName) {
   const ingredientBtn = document.querySelector(`[data-ingredient="${ingredientName}"]`);
   if (!ingredientBtn) return;
   
-  const buttonText = ingredientBtn.textContent;
-  const priceMatch = buttonText.match(/\((\d+) แต้ม\)/);
-  const price = priceMatch ? parseInt(priceMatch[1]) : 0;
+  // อ่านราคาจาก data-price attribute
+  const price = parseInt(ingredientBtn.dataset.price) || 0;
   
   // ตรวจสอบว่า currentPlayerScore เป็นตัวเลขที่ถูกต้อง
   if (isNaN(currentPlayerScore) || currentPlayerScore === undefined) {
@@ -329,7 +328,38 @@ function updateMyIngredients(ingredients) {
   
   const myIngredientsEl = document.getElementById('my-ingredients');
   if (myIngredientsEl) {
-    myIngredientsEl.textContent = ingredients.length > 0 ? ingredients.join(', ') : 'ยังไม่มี';
+    if (ingredients.length > 0) {
+      // สร้าง mapping ระหว่างชื่อวัตถุดิบกับชื่อไฟล์รูปภาพ
+      const ingredientImageMap = {};
+      if (window.ingredients && Array.isArray(window.ingredients)) {
+        window.ingredients.forEach(ing => {
+          ingredientImageMap[ing.name] = ing.image_file;
+        });
+      }
+      
+      // สร้าง HTML สำหรับแสดงวัตถุดิบเป็นรูปภาพ
+      const ingredientsHTML = ingredients.map(ingredient => {
+        const imageFile = ingredientImageMap[ingredient] || `${ingredient}.png`;
+        return `
+          <div class="inline-flex items-center bg-green-100 rounded-lg px-2 py-1 mr-2 mb-2 shadow-sm border border-green-200">
+            <div class="w-10 h-10 bg-white rounded-md mr-2 flex items-center justify-center overflow-hidden border border-green-300">
+              <img src="/img/${imageFile}" 
+                   alt="${ingredient}" 
+                   class="object-cover w-full h-full" 
+                   loading="lazy"
+                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+              <div style="display:none;" class="flex items-center justify-center">
+                <i class="fa-solid fa-carrot text-green-400 text-xs"></i>
+              </div>
+            </div>
+            <span class="text-green-800 text-sm font-semibold">${ingredient}</span>
+          </div>
+        `;
+      }).join('');
+      myIngredientsEl.innerHTML = ingredientsHTML;
+    } else {
+      myIngredientsEl.innerHTML = '<span class="text-gray-500 italic">ยังไม่มี</span>';
+    }
   }
 }
 
@@ -435,12 +465,6 @@ function updateMyShopUI() {
   
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(user.id, myIngredients);
-  
-  // อัปเดตอาหาร
-  const myFoodEl = document.getElementById('my-food');
-  if (myFoodEl) {
-    myFoodEl.textContent = myFood;
-  }
 }
 
 socket.on('update_points_ingredients', data => {
