@@ -6,7 +6,7 @@ const ingredients = [
   { name: 'กระเทียม', price: 3, image_file: '13.png' },
   { name: 'พริก', price: 3, image_file: '14.png' },
   { name: 'มะเขือเทศ', price: 4, image_file: '16.png' },
-  { name: 'หอมแดง', price: 4, image_file: '17.png' },
+  { name: 'หอม', price: 4, image_file: '17.png' },
   { name: 'ไข่', price: 4, image_file: '20.png' },
   { name: 'กุ้ง', price: 5, image_file: '21.png' },
   { name: 'มะนาว', price: 4, image_file: '12.png' },
@@ -15,7 +15,12 @@ const ingredients = [
   { name: 'ฟักทอง', price: 6, image_file: '25.png' },
   { name: 'เห็ด', price: 6, image_file: '23.png' },
   { name: 'ใบกะเพรา', price: 10, image_file: '15.png' }, 
-  { name: 'ใบโหระพา', price: 10, image_file: '26.png' }  
+  { name: 'ใบโหระพา', price: 10, image_file: '26.png' } ,
+  { name: 'แครอท', price: 4, image_file: '24.png' }, 
+  { name: 'ไก่', price: 5, image_file: '22.png' },
+  { name: 'หอมแดง', price: 5, image_file: '28.png' },
+  { name: 'ข้าว', price: 8, image_file: '29.png' }
+
 ];
 
 // ข้อมูลสูตรอาหารตัวอย่าง
