@@ -211,15 +211,34 @@ exports.gameRoomPage = (req, res) => {
                   playerFoodsMap[pf.user_id] = pf.foods ? pf.foods.split(',') : [];
                 });
                 
-                res.render('game-room', {
-                  layout: 'layouts/main',
-                  user: req.user,
-                  room,
-                  players,
-                  questions,
-                  ingredients,
-                  mealIngredients,
-                  playerFoods: playerFoodsMap
+                // ดึงวัตถุดิบของผู้เล่นในห้องนี้
+                usersDB.all(`
+                  SELECT 
+                    pi.user_id,
+                    GROUP_CONCAT(pi.ingredient_name) as ingredients
+                  FROM player_ingredients pi
+                  WHERE pi.room_id = ?
+                  GROUP BY pi.user_id
+                `, [roomId], (err7, playerIngredients) => {
+                  if (err7) playerIngredients = [];
+                  
+                  // แปลงข้อมูลให้อยู่ในรูปแบบที่ใช้งานง่าย
+                  const playerIngredientsMap = {};
+                  playerIngredients.forEach(pi => {
+                    playerIngredientsMap[pi.user_id] = pi.ingredients ? pi.ingredients.split(',') : [];
+                  });
+                  
+                  res.render('game-room', {
+                    layout: 'layouts/main',
+                    user: req.user,
+                    room,
+                    players,
+                    questions,
+                    ingredients,
+                    mealIngredients,
+                    playerFoods: playerFoodsMap,
+                    playerIngredients: playerIngredientsMap
+                  });
                 });
               });
             });

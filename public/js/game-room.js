@@ -5,11 +5,11 @@ let startTime = null;
 
 // ตัวแปรสำหรับเก็บสถานะเกม - รวมจากไฟล์แรก
 let currentPlayerScore = window.initialPlayerScore || 0;
-let playerIngredients = [];
+let playerIngredients = window.initialPlayerIngredients || [];
 
 // สำหรับวัตถุดิบและอาหาร
 let myPoints = window.initialPlayerScore || 0;
-let myIngredients = [];
+let myIngredients = window.initialPlayerIngredients || [];
 let myFood = '';
 
 // --- Room deleted event ---
@@ -128,17 +128,16 @@ function buyIngredient(ingredientName) {
       currentPlayerScore = newScore;
       myPoints = currentPlayerScore;
       
-      // อัปเดต UI ทันที
-      const myPointsEl = document.getElementById('my-points');
-      if (myPointsEl) {
-        myPointsEl.textContent = currentPlayerScore;
-      }
+      // เพิ่มวัตถุดิบในรายการ
+      myIngredients.push(ingredientName);
+      playerIngredients.push(ingredientName);
       
-      // อัปเดตคะแนนในรายชื่อผู้เล่นถ้ามี
-      const scoreEl = document.getElementById(`score-${user.id}`);
-      if (scoreEl) {
-        scoreEl.textContent = currentPlayerScore;
-      }
+      // อัปเดต UI ทันที - แก้ไขให้อัปเดตทุกที่ที่แสดงคะแนนและวัตถุดิบ
+      updateMyScore(currentPlayerScore);
+      updateMyIngredients(myIngredients);
+      
+      // อัปเดตวัตถุดิบใน player list
+      updatePlayerIngredientsInList(user.id, myIngredients);
       
       socket.emit('buy_ingredient', {
         roomId: window.roomId || roomId,
@@ -199,6 +198,12 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
   if (scoreListEl) {
     scoreListEl.textContent = newScore;
   }
+  
+  // อัปเดตคะแนนใน player list ด้วย
+  const playerScoreEl = document.querySelector(`#player-li-${playerId} .text-green-600`);
+  if (playerScoreEl) {
+    playerScoreEl.textContent = `+${newScore}`;
+  }
 
   // ถ้าเป็นผู้เล่นเอง
   if ((window.user && window.user.id === playerId) || (user && user.id === playerId)) {
@@ -213,6 +218,36 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
   }
 });
 
+// รับการอัปเดตวัตถุดิบแบบ realtime
+socket.on('player_ingredients_updated', ({ userId, ingredients }) => {
+  console.log(`วัตถุดิบอัปเดต: ผู้เล่น ${userId} = ${ingredients.join(', ')}`);
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(userId, ingredients);
+  
+  // ถ้าเป็นผู้เล่นเอง
+  if ((window.user && window.user.id === userId) || (user && user.id === userId)) {
+    updateMyIngredients(ingredients);
+    // อัปเดตวัตถุดิบใน player list ด้วย
+    updatePlayerIngredientsInList(userId, ingredients);
+  }
+});
+
+// รับการโหลดวัตถุดิบของผู้เล่น
+socket.on('player_ingredients_loaded', ({ userId, ingredients }) => {
+  console.log(`โหลดวัตถุดิบ: ผู้เล่น ${userId} = ${ingredients.join(', ')}`);
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(userId, ingredients);
+  
+  // ถ้าเป็นผู้เล่นเอง
+  if ((window.user && window.user.id === userId) || (user && user.id === userId)) {
+    updateMyIngredients(ingredients);
+    // อัปเดตวัตถุดิบใน player list ด้วย
+    updatePlayerIngredientsInList(userId, ingredients);
+  }
+});
+
 
 
 // รับผลการซื้อวัตถุดิบ - จากไฟล์แรก
@@ -222,6 +257,9 @@ socket.on('ingredient-purchased', ({ ingredientName, price, newScore, ingredient
   // อัปเดตคะแนนและวัตถุดิบของตัวเอง
   updateMyScore(newScore);
   updateMyIngredients(ingredients);
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(user.id, ingredients);
 
   // แสดงข้อความซื้อสำเร็จ
   showPurchaseSuccessMessage(ingredientName, price);
@@ -253,6 +291,9 @@ socket.on('game-reset', ({ message }) => {
   });
   updateMyScore(0);
   updateMyIngredients([]);
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(user.id, []);
 });
 
 // ===============================
@@ -263,9 +304,22 @@ function updateMyScore(newScore) {
   currentPlayerScore = newScore;
   myPoints = newScore; // ซิงค์ค่า
   
+  // อัปเดตคะแนนในส่วน "แต้มของคุณ"
   const myPointsEl = document.getElementById('my-points');
   if (myPointsEl) {
     myPointsEl.textContent = newScore;
+  }
+  
+  // อัปเดตคะแนนในรายชื่อผู้เล่น
+  const scoreEl = document.getElementById(`score-${user.id}`);
+  if (scoreEl) {
+    scoreEl.textContent = newScore;
+  }
+  
+  // อัปเดตคะแนนใน player list ด้วย
+  const playerScoreEl = document.querySelector(`#player-li-${user.id} .text-green-600`);
+  if (playerScoreEl) {
+    playerScoreEl.textContent = `+${newScore}`;
   }
 }
 
@@ -277,6 +331,11 @@ function updateMyIngredients(ingredients) {
   if (myIngredientsEl) {
     myIngredientsEl.textContent = ingredients.length > 0 ? ingredients.join(', ') : 'ยังไม่มี';
   }
+}
+
+function updatePlayerIngredientsInList(userId, ingredients) {
+  // ไม่ต้องแสดงวัตถุดิบในรายชื่อผู้เล่นแล้ว
+  return;
 }
 
 function updateCookableMealsUI(cookableMeals) {
@@ -365,9 +424,23 @@ function showCookingSuccessAnimation(mealName) {
 
 // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
 function updateMyShopUI() {
-  document.getElementById('my-points').textContent = myPoints;
-  document.getElementById('my-ingredients').textContent = myIngredients.join(', ') || '-';
-  document.getElementById('my-food').textContent = myFood;
+  // อัปเดตคะแนนในทุกที่ที่แสดง
+  updateMyScore(myPoints);
+  
+  // อัปเดตวัตถุดิบ
+  const myIngredientsEl = document.getElementById('my-ingredients');
+  if (myIngredientsEl) {
+    myIngredientsEl.textContent = myIngredients.length > 0 ? myIngredients.join(', ') : 'ยังไม่มี';
+  }
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(user.id, myIngredients);
+  
+  // อัปเดตอาหาร
+  const myFoodEl = document.getElementById('my-food');
+  if (myFoodEl) {
+    myFoodEl.textContent = myFood;
+  }
 }
 
 socket.on('update_points_ingredients', data => {
@@ -385,6 +458,12 @@ socket.on('update_points_ingredients', data => {
       ingredients: data.ingredients,
       food: data.food
     });
+    
+    // อัปเดตคะแนนในทุกที่ที่แสดง
+    updateMyScore(newPoints);
+    
+    // อัปเดตวัตถุดิบใน player list
+    updatePlayerIngredientsInList(user.id, data.ingredients);
     
     // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
     if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
@@ -473,6 +552,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // ดึงรายการวัตถุดิบ - จากไฟล์แรก
   if (window.roomId || roomId) {
     socket.emit('get-ingredients', { roomId: window.roomId || roomId });
+  }
+  
+  // ดึงวัตถุดิบของผู้เล่น
+  if (window.roomId || roomId) {
+    socket.emit('get_player_ingredients', { 
+      roomId: window.roomId || roomId, 
+      userId: user.id 
+    });
   }
   
   updateMyShopUI();
@@ -603,7 +690,8 @@ function updatePlayerList(players) {
   players.forEach(player => {
     if (player && player.id && player.name !== undefined) {
       const score = player.score || 0;
-      list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">${score}</span></li>`;
+      
+      list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${score}</span></li>`;
       scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold"><span id="score-${player.id}">${score}</span></span></li>`;
     } else {
       console.warn('Invalid player data:', player);
@@ -1227,6 +1315,17 @@ socket.on('user_answered', data => {
     if (scoreEl) {
       scoreEl.textContent = data.score;
     }
+    
+    // อัปเดตคะแนนใน player list ด้วย
+    const playerScoreEl = document.querySelector(`#player-li-${data.userId} .text-green-600`);
+    if (playerScoreEl) {
+      playerScoreEl.textContent = `+${data.score}`;
+    }
+    
+    // ถ้าเป็นผู้เล่นเอง ให้อัปเดตคะแนนในส่วน "แต้มของคุณ" ด้วย
+    if (data.userId === user.id) {
+      updateMyScore(data.score);
+    }
   }
   
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
@@ -1383,13 +1482,17 @@ function showSummary() {
 
 // Initialize scores when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
-  // อัปเดตคะแนนเริ่มต้นใน UI
-  const myPointsEl = document.getElementById('my-points');
-  if (myPointsEl) {
-    myPointsEl.textContent = currentPlayerScore;
-  }
+  // อัปเดตคะแนนเริ่มต้นใน UI ในทุกที่ที่แสดง
+  updateMyScore(currentPlayerScore);
+  
+  // อัปเดตวัตถุดิบเริ่มต้น
+  updateMyIngredients(myIngredients);
+  
+  // อัปเดตวัตถุดิบใน player list
+  updatePlayerIngredientsInList(user.id, myIngredients);
   
   console.log('Initial player score:', currentPlayerScore);
   console.log('Initial myPoints:', myPoints);
+  console.log('Initial myIngredients:', myIngredients);
 });
 
