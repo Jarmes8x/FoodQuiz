@@ -180,6 +180,23 @@ usersDB.serialize(() => {
       console.error("Error creating meal_ingredient table:", err.message);
     }
   });
+
+  // Table: player_ingredients (ตารางใหม่สำหรับเก็บวัตถุดิบที่ผู้เล่นซื้อ)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS player_ingredients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      ingredient_name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating player_ingredients table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close
