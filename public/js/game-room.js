@@ -452,6 +452,108 @@ function showCookingSuccessAnimation(mealName) {
   });
 }
 
+
+function showQuestion() {
+  const q = questions[currentQuestion];
+  if (!q) {
+    showSummary();
+    return;
+  }
+  
+  // ล้าง timer เก่าก่อน (ถ้ามี)
+  if (currentQuestionTimer) {
+    clearInterval(currentQuestionTimer);
+    currentQuestionTimer = null;
+  }
+  
+  let timeLeft = 20; // 20 วินาทีต่อข้อ
+  answered = false;
+  selectedAnswerIdx = null;
+  startTime = Date.now();
+  let questionEnded = false;
+  
+  const gameArea = document.getElementById('game-area');
+  
+  // สร้างปุ่มตัวเลือก
+  let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
+    let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
+    if (selectedAnswerIdx !== null && selectedAnswerIdx == i) btnClass += ' ring-4 ring-green-400';
+    return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${c}</button>`;
+  }).join('');
+
+  // เพิ่มปุ่มสำหรับเจ้าของห้องไปข้อถัดไป
+  let ownerControlsHtml = '';
+  if (isOwner) {
+    ownerControlsHtml = `
+      <div class="mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+        <div class="text-center">
+          <div class="text-yellow-800 font-semibold mb-2">🔧 ควบคุมเกม (เจ้าของห้อง)</div>
+          <button id="force-next-question" class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold px-4 py-2 rounded-lg shadow-md transition-all duration-200">
+            <i class="fa-solid fa-forward mr-2"></i>ไปข้อถัดไป
+          </button>
+          <div class="text-xs text-yellow-700 mt-1">กดเพื่อข้ามไปข้อถัดไปทันที</div>
+        </div>
+      </div>
+    `;
+  }
+  
+  gameArea.innerHTML = `
+      <div class="mb-4">
+        <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion + 1}: ${q.question_text}</div>
+        <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
+        <div class="text-lg text-red-600 font-bold mb-2">เวลาที่เหลือ: <span id='question-timer'>${timeLeft}</span> วินาที</div>
+        <div id="waiting-answers" class="text-blue-600 font-semibold mb-2 hidden">รอผู้เล่นอื่นตอบ...</div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ${choicesHtml}
+      </div>
+      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
+      ${ownerControlsHtml}
+    `;
+
+  // เพิ่ม Event listener สำหรับปุ่มไปข้อถัดไป (เจ้าของห้อง)
+  if (isOwner) {
+    const forceNextBtn = document.getElementById('force-next-question');
+    if (forceNextBtn) {
+      forceNextBtn.onclick = () => {
+        // ยืนยันก่อนไปข้อถัดไป
+        Swal.fire({
+          title: 'ยืนยันการไปข้อถัดไป',
+          text: 'คุณต้องการไปยังข้อถัดไปทันทีหรือไม่?',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonText: 'ไปข้อถัดไป',
+          cancelButtonText: 'ยกเลิก',
+          confirmButtonColor: '#f59e0b',
+          cancelButtonColor: '#6b7280'
+        }).then((result) => {
+          if (result.isConfirmed) {
+            // ส่งคำสั่งไปยัง server เพื่อไปข้อถัดไป
+            socket.emit('owner_force_next_question', { 
+              roomId: window.roomId || roomId, 
+              questionIndex: currentQuestion 
+            });
+            
+            // หยุด timer ปัจจุบัน
+            clearQuestionTimeout();
+            if (currentQuestionTimer) {
+              clearInterval(currentQuestionTimer);
+              currentQuestionTimer = null;
+            }
+            
+            // แสดงข้อความแจ้งเตือน
+            showNotification('เจ้าของห้องข้ามไปข้อถัดไป', 'info');
+          }
+        });
+      };
+    }
+  }
+
+  // ส่วนที่เหลือของฟังก์ชั่น showQuestion() ยังคงเดิม...
+  // (ส่วน timer, endQuestion, event handlers ฯลฯ)
+}
+
+
 // --- ส่วนฟีเจอร์ซื้อวัตถุดิบและสุ่มอาหาร ---
 function updateMyShopUI() {
   // อัปเดตคะแนนในทุกที่ที่แสดง
@@ -588,6 +690,75 @@ document.addEventListener('DOMContentLoaded', () => {
   
   updateMyShopUI();
 });
+
+// รับคำสั่งจากเจ้าของห้องให้ไปข้อถัดไป
+socket.on('owner_forced_next_question', (data) => {
+  if (data.questionIndex === currentQuestion) {
+    // หยุด timer ปัจจุบัน
+    clearQuestionTimeout();
+    if (currentQuestionTimer) {
+      clearInterval(currentQuestionTimer);
+      currentQuestionTimer = null;
+    }
+    
+    // แสดงเฉลยทันที
+    showAnswer();
+    
+    // แสดงข้อความแจ้งเตือน
+    showNotification('เจ้าของห้องข้ามไปข้อถัดไป', 'warning');
+    
+    // ไปข้อถัดไปหลังจาก 2 วินาที
+    setTimeout(() => {
+      currentQuestion++;
+      selectedAnswerIdx = null;
+      answered = false;
+      if (currentQuestion < questions.length) {
+        showQuestion();
+      } else {
+        showSummary();
+      }
+    }, 2000);
+  }
+});
+
+// เพิ่มในส่วน Owner starts game (ประมาณบรรทัดที่ 350-400)
+// เพิ่มการจัดการปุ่มไปข้อถัดไปใน event handler เดิม
+
+if (isOwner) {
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  
+  if (startBtn) {
+    startBtn.onclick = () => {
+      socket.emit('request_questions', roomId);
+      startBtn.classList.add('hidden');
+    };
+  }
+  
+  // ปรับปรุงปุ่ม next-btn ให้ทำงานเหมือนปุ่มใหม่
+  if (nextBtn) {
+    nextBtn.onclick = () => {
+      // ใช้ฟังก์ชั่นเดียวกับปุ่มในเกม
+      Swal.fire({
+        title: 'ยืนยันการไปข้อถัดไป',
+        text: 'คุณต้องการไปยังข้อถัดไปทันทีหรือไม่?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'ไปข้อถัดไป',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#f59e0b',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          socket.emit('owner_force_next_question', { 
+            roomId: window.roomId || roomId, 
+            questionIndex: currentQuestion 
+          });
+        }
+      });
+    };
+  }
+}
 
 // ===============================
 // ฟังก์ชันตอบคำถาม - จากไฟล์แรก
