@@ -12,12 +12,21 @@ let myPoints = window.initialPlayerScore || 0;
 let myIngredients = window.initialPlayerIngredients || [];
 let myFood = '';
 
+// ตัวแปรสำหรับเก็บสถานะเกม
+let gameState = window.initialGameState || {
+  currentQuestion: 0,
+  answeredQuestions: [],
+  gameStarted: false,
+  gameFinished: false
+};
+
+console.log('Initial game state from window:', window.initialGameState);
+console.log('Final game state:', gameState);
+
 // --- Room deleted event ---
 socket.on('room_deleted', function (data) {
   showNotification('ห้องนี้ถูกลบแล้ว', 'info');
-  setTimeout(() => {
-    window.location.href = '/';
-  }, 2000);
+  window.location.href = '/dashboard';
 });
 
 // เมื่อห้องเต็ม
@@ -41,7 +50,7 @@ function showNotification(message, type = 'info') {
     'error': 'error',
     'warning': 'warning'
   };
-  
+
   Swal.fire({
     title: message,
     icon: iconMap[type] || 'info',
@@ -66,15 +75,15 @@ function buyIngredient(ingredientName) {
   // ค้นหาราคาจาก DOM
   const ingredientBtn = document.querySelector(`[data-ingredient="${ingredientName}"]`);
   if (!ingredientBtn) return;
-  
+
   // อ่านราคาจาก data-price attribute
   const price = parseInt(ingredientBtn.dataset.price) || 0;
-  
+
   // ตรวจสอบว่า currentPlayerScore เป็นตัวเลขที่ถูกต้อง
   if (isNaN(currentPlayerScore) || currentPlayerScore === undefined) {
     currentPlayerScore = myPoints || 0;
   }
-  
+
   // ตรวจสอบว่า price เป็นตัวเลขที่ถูกต้อง
   if (isNaN(price) || price <= 0) {
     console.error('Invalid price:', price, 'from button text:', buttonText);
@@ -86,7 +95,7 @@ function buyIngredient(ingredientName) {
     });
     return;
   }
-  
+
   // ตรวจสอบคะแนนก่อนซื้อ
   if (currentPlayerScore < price) {
     Swal.fire({
@@ -98,7 +107,7 @@ function buyIngredient(ingredientName) {
     });
     return;
   }
-  
+
   // ยืนยันการซื้อ
   Swal.fire({
     title: 'ยืนยันการซื้อ',
@@ -113,7 +122,7 @@ function buyIngredient(ingredientName) {
     if (result.isConfirmed) {
       // อัปเดตคะแนนทันทีแบบ realtime
       const newScore = currentPlayerScore - price;
-      
+
       // ตรวจสอบว่าผลลัพธ์เป็นตัวเลขที่ถูกต้อง
       if (isNaN(newScore)) {
         console.error('NaN detected in score calculation:', {
@@ -123,21 +132,21 @@ function buyIngredient(ingredientName) {
         });
         return;
       }
-      
+
       currentPlayerScore = newScore;
       myPoints = currentPlayerScore;
-      
+
       // เพิ่มวัตถุดิบในรายการ
       myIngredients.push(ingredientName);
       playerIngredients.push(ingredientName);
-      
+
       // อัปเดต UI ทันที - แก้ไขให้อัปเดตทุกที่ที่แสดงคะแนนและวัตถุดิบ
       updateMyScore(currentPlayerScore);
       updateMyIngredients(myIngredients);
-      
+
       // อัปเดตวัตถุดิบใน player list
       updatePlayerIngredientsInList(user.id, myIngredients);
-      
+
       socket.emit('buy_ingredient', {
         roomId: window.roomId || roomId,
         userId: user.id,
@@ -150,10 +159,10 @@ function buyIngredient(ingredientName) {
 // ฟังก์ชันทำอาหาร - จากไฟล์แรก
 function cookMeal(mealName, requiredIngredientsStr) {
   const requiredIngredients = requiredIngredientsStr.split(',').map(ing => ing.trim());
-  
+
   // ตรวจสอบว่ามีวัตถุดิบครบหรือไม่
   const missingIngredients = requiredIngredients.filter(ing => !playerIngredients.includes(ing));
-  
+
   if (missingIngredients.length > 0) {
     Swal.fire({
       title: 'วัตถุดิบไม่ครบ!',
@@ -164,7 +173,7 @@ function cookMeal(mealName, requiredIngredientsStr) {
     });
     return;
   }
-  
+
   // ลบวัตถุดิบที่ใช้ไปจากรายการ
   const updatedIngredients = [...playerIngredients];
   requiredIngredients.forEach(ingredient => {
@@ -173,15 +182,15 @@ function cookMeal(mealName, requiredIngredientsStr) {
       updatedIngredients.splice(index, 1);
     }
   });
-  
+
   // อัปเดตวัตถุดิบในตัวแปร
   playerIngredients = updatedIngredients;
   myIngredients = updatedIngredients;
-  
+
   // อัปเดต UI
   updateMyIngredients(updatedIngredients);
   updatePlayerIngredientsInList(user.id, updatedIngredients);
-  
+
   // ส่งข้อมูลไปยัง server เพื่อบันทึกการทำอาหาร
   socket.emit('cook_meal', {
     roomId: window.roomId || roomId,
@@ -190,7 +199,7 @@ function cookMeal(mealName, requiredIngredientsStr) {
     usedIngredients: requiredIngredients,
     remainingIngredients: updatedIngredients
   });
-  
+
   // ทำอาหารสำเร็จ
   Swal.fire({
     title: 'ทำอาหารสำเร็จ!',
@@ -211,7 +220,7 @@ function cookMeal(mealName, requiredIngredientsStr) {
 // รับการอัปเดตคะแนน - จากไฟล์แรก
 socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained }) => {
   console.log(`คะแนนอัปเดต: ${playerName} = ${newScore} (${scoreGained >= 0 ? '+' : ''}${scoreGained})`);
-  
+
   // อัปเดต score ใน player list
   const scoreEl = document.getElementById(`score-${playerId}`);
   if (scoreEl) {
@@ -223,7 +232,7 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
   if (scoreListEl) {
     scoreListEl.textContent = newScore;
   }
-  
+
   // อัปเดตคะแนนใน player list ด้วย
   const playerScoreEl = document.querySelector(`#player-li-${playerId} .text-green-600`);
   if (playerScoreEl) {
@@ -233,7 +242,7 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
   // ถ้าเป็นผู้เล่นเอง
   if ((window.user && window.user.id === playerId) || (user && user.id === playerId)) {
     updateMyScore(newScore);
-    
+
     // แสดง animation
     if (scoreGained > 0) {
       showScoreGainAnimation(scoreGained);
@@ -246,10 +255,10 @@ socket.on('player-score-updated', ({ playerId, playerName, newScore, scoreGained
 // รับการอัปเดตวัตถุดิบแบบ realtime
 socket.on('player_ingredients_updated', ({ userId, ingredients }) => {
   console.log(`วัตถุดิบอัปเดต: ผู้เล่น ${userId} = ${ingredients.join(', ')}`);
-  
+
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(userId, ingredients);
-  
+
   // ถ้าเป็นผู้เล่นเอง
   if ((window.user && window.user.id === userId) || (user && user.id === userId)) {
     updateMyIngredients(ingredients);
@@ -261,10 +270,10 @@ socket.on('player_ingredients_updated', ({ userId, ingredients }) => {
 // รับการโหลดวัตถุดิบของผู้เล่น
 socket.on('player_ingredients_loaded', ({ userId, ingredients }) => {
   console.log(`โหลดวัตถุดิบ: ผู้เล่น ${userId} = ${ingredients.join(', ')}`);
-  
+
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(userId, ingredients);
-  
+
   // ถ้าเป็นผู้เล่นเอง
   if ((window.user && window.user.id === userId) || (user && user.id === userId)) {
     updateMyIngredients(ingredients);
@@ -276,18 +285,18 @@ socket.on('player_ingredients_loaded', ({ userId, ingredients }) => {
 // รับการยืนยันการทำอาหารสำเร็จ
 socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredients }) => {
   console.log(`ทำอาหารสำเร็จ: ${mealName} ใช้วัตถุดิบ: ${usedIngredients.join(', ')}`);
-  
+
   // อัปเดตวัตถุดิบในตัวแปร
   playerIngredients = remainingIngredients;
   myIngredients = remainingIngredients;
-  
+
   // อัปเดต UI
   updateMyIngredients(remainingIngredients);
   updatePlayerIngredientsInList(user.id, remainingIngredients);
-  
+
   // โหลดประวัติการทำอาหารใหม่
   loadCookingHistory();
-  
+
   // แสดงข้อความแจ้งเตือน
   Swal.fire({
     title: 'ทำอาหารสำเร็จ!',
@@ -308,7 +317,7 @@ socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredie
 // รับการแจ้งเตือนเมื่อผู้เล่นอื่นทำอาหาร
 socket.on('player_cooked_meal', ({ userId, mealName, usedIngredients }) => {
   console.log(`ผู้เล่น ${userId} ทำอาหาร: ${mealName}`);
-  
+
   // แสดงข้อความแจ้งเตือน (ถ้าต้องการ)
   // สามารถเพิ่มการแสดง notification ได้ที่นี่
 });
@@ -333,7 +342,7 @@ function updateCookingHistoryUI(cookedMeals) {
         hour: '2-digit',
         minute: '2-digit'
       });
-      
+
       return `
         <div class="bg-white rounded-lg p-4 mb-3 shadow-sm border border-orange-200 hover:shadow-md transition-shadow duration-200">
           <div class="flex items-center justify-between mb-2">
@@ -353,9 +362,9 @@ function updateCookingHistoryUI(cookedMeals) {
         </div>
       `;
     }).join('');
-    
+
     container.innerHTML = mealsHTML;
-    
+
     // อัปเดตสถานะการทำอาหารในส่วนแสดงอาหารที่ได้รับ
     updateMealCookStatus(cookedMeals);
   } else {
@@ -368,15 +377,31 @@ function updateCookingHistoryUI(cookedMeals) {
   }
 }
 
+// ฟังก์ชันสำหรับบันทึกสถานะเกม
+function saveGameState() {
+  const gameStateToSave = {
+    currentQuestion: currentQuestion,
+    answeredQuestions: gameState.answeredQuestions,
+    gameStarted: gameState.gameStarted,
+    gameFinished: gameState.gameFinished
+  };
+
+  socket.emit('save_game_state', {
+    roomId: window.roomId || roomId,
+    userId: user.id,
+    gameState: gameStateToSave
+  });
+}
+
 // ฟังก์ชันอัปเดตสถานะการทำอาหารในส่วนแสดงอาหารที่ได้รับ
 function updateMealCookStatus(cookedMeals) {
   const cookedMealNames = cookedMeals.map(meal => meal.meal_name);
-  
+
   // หาปุ่มทำอาหารทั้งหมด
   document.querySelectorAll('.cook-meal-btn').forEach(btn => {
     const mealName = btn.dataset.meal;
     const statusDiv = btn.parentElement.querySelector('.cook-status');
-    
+
     if (cookedMealNames.includes(mealName)) {
       // ถ้าทำเสร็จแล้ว
       btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -384,7 +409,7 @@ function updateMealCookStatus(cookedMeals) {
       btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>ทำเสร็จแล้ว';
       btn.classList.remove('bg-green-500', 'hover:bg-green-600');
       btn.classList.add('bg-gray-400', 'hover:bg-gray-400');
-      
+
       if (statusDiv) {
         statusDiv.classList.remove('hidden');
       }
@@ -395,13 +420,13 @@ function updateMealCookStatus(cookedMeals) {
       btn.innerHTML = '<i class="fa-solid fa-fire mr-1"></i>ทำอาหาร';
       btn.classList.add('bg-green-500', 'hover:bg-green-600');
       btn.classList.remove('bg-gray-400', 'hover:bg-gray-400');
-      
+
       if (statusDiv) {
         statusDiv.classList.add('hidden');
       }
     }
   });
-  
+
   // อัปเดตสถิติการทำอาหาร
   updateCookingStats(cookedMeals);
 }
@@ -411,7 +436,7 @@ function updateCookingStats(cookedMeals) {
   const totalCooked = cookedMeals.length;
   const totalAvailable = document.querySelectorAll('.cook-meal-btn').length;
   const completionRate = totalAvailable > 0 ? Math.round((totalCooked / totalAvailable) * 100) : 0;
-  
+
   // หาอาหารที่ทำล่าสุด
   let lastCooked = '-';
   if (cookedMeals.length > 0) {
@@ -419,7 +444,7 @@ function updateCookingStats(cookedMeals) {
     const cookedDate = new Date(latestMeal.cooked_at);
     const now = new Date();
     const diffInMinutes = Math.floor((now - cookedDate) / (1000 * 60));
-    
+
     if (diffInMinutes < 1) {
       lastCooked = 'เพิ่งทำ';
     } else if (diffInMinutes < 60) {
@@ -432,13 +457,13 @@ function updateCookingStats(cookedMeals) {
       lastCooked = `${days} วัน`;
     }
   }
-  
+
   // อัปเดต UI
   const totalCookedEl = document.getElementById('total-cooked');
   const totalAvailableEl = document.getElementById('total-available');
   const completionRateEl = document.getElementById('completion-rate');
   const lastCookedEl = document.getElementById('last-cooked');
-  
+
   if (totalCookedEl) totalCookedEl.textContent = totalCooked;
   if (totalAvailableEl) totalAvailableEl.textContent = totalAvailable;
   if (completionRateEl) completionRateEl.textContent = `${completionRate}%`;
@@ -458,17 +483,17 @@ function loadCookingHistory() {
 // รับผลการซื้อวัตถุดิบ - จากไฟล์แรก
 socket.on('ingredient-purchased', ({ ingredientName, price, newScore, ingredients, imageFile }) => {
   console.log(`ซื้อสำเร็จ: ${ingredientName} ราคา ${price} คะแนน`);
-  
+
   // อัปเดตคะแนนและวัตถุดิบของตัวเอง
   updateMyScore(newScore);
   updateMyIngredients(ingredients);
-  
+
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(user.id, ingredients);
 
   // แสดงข้อความซื้อสำเร็จ
   showPurchaseSuccessMessage(ingredientName, price);
-  
+
   // ตรวจสอบอาหารที่ทำได้ใหม่
   socket.emit('check-cookable-meals', { roomId: window.roomId || roomId });
 });
@@ -485,20 +510,69 @@ socket.on('cookable-meals-updated', ({ playerIngredients, cookableMeals }) => {
   updateCookableMealsUI(cookableMeals);
 });
 
-// รับการ reset เกม - จากไฟล์แรก
-socket.on('game-reset', ({ message }) => {
+// รับการ reset เกม
+socket.on('game_reset', ({ message, resetBy }) => {
+  console.log('Game reset received:', message);
+  
+  // รีเซ็ตสถานะเกม
+  gameState = {
+    currentQuestion: 0,
+    answeredQuestions: [],
+    gameStarted: false,
+    gameFinished: false
+  };
+  
+  // รีเซ็ตตัวแปรเกม
+  currentQuestion = 0;
+  answered = false;
+  selectedAnswerIdx = null;
+  questions = [];
+  
+  // รีเซ็ตคะแนนและวัตถุดิบ
+  currentPlayerScore = 0;
+  myPoints = 0;
+  playerIngredients = [];
+  myIngredients = [];
+  
+  // อัปเดต UI
+  updateMyScore(0);
+  updateMyIngredients([]);
+  updatePlayerIngredientsInList(user.id, []);
+  
+  // แสดงปุ่มเริ่มเกมสำหรับเจ้าของห้อง
+  if (isOwner) {
+    const startBtn = document.getElementById('start-btn');
+    if (startBtn) {
+      startBtn.classList.remove('hidden');
+    }
+    const resetBtn = document.getElementById('reset-game-btn');
+    if (resetBtn) {
+      resetBtn.classList.add('hidden');
+    }
+  }
+  
+  // แสดงข้อความแจ้งเตือน
   Swal.fire({
-    title: 'เกมถูกรีเซ็ต',
+    title: 'เกมถูกรีเซ็ตแล้ว',
     text: message,
     icon: 'info',
     confirmButtonText: 'ตกลง',
     confirmButtonColor: '#3b82f6'
   });
-  updateMyScore(0);
-  updateMyIngredients([]);
+});
+
+// รับการรีเซ็ตเกมอัตโนมัติ
+socket.on('game_auto_reset', ({ message }) => {
+  console.log('Game auto reset received:', message);
   
-  // อัปเดตวัตถุดิบใน player list
-  updatePlayerIngredientsInList(user.id, []);
+  // แสดงข้อความแจ้งเตือน
+  Swal.fire({
+    title: 'เกมถูกรีเซ็ตอัตโนมัติแล้ว',
+    text: message,
+    icon: 'success',
+    confirmButtonText: 'ตกลง',
+    confirmButtonColor: '#10b981'
+  });
 });
 
 // ===============================
@@ -508,19 +582,19 @@ socket.on('game-reset', ({ message }) => {
 function updateMyScore(newScore) {
   currentPlayerScore = newScore;
   myPoints = newScore; // ซิงค์ค่า
-  
+
   // อัปเดตคะแนนในส่วน "แต้มของคุณ"
   const myPointsEl = document.getElementById('my-points');
   if (myPointsEl) {
     myPointsEl.textContent = newScore;
   }
-  
+
   // อัปเดตคะแนนในรายชื่อผู้เล่น
   const scoreEl = document.getElementById(`score-${user.id}`);
   if (scoreEl) {
     scoreEl.textContent = newScore;
   }
-  
+
   // อัปเดตคะแนนใน player list ด้วย
   const playerScoreEl = document.querySelector(`#player-li-${user.id} .text-green-600`);
   if (playerScoreEl) {
@@ -531,7 +605,7 @@ function updateMyScore(newScore) {
 function updateMyIngredients(ingredients) {
   playerIngredients = ingredients;
   myIngredients = ingredients; // ซิงค์ค่า
-  
+
   const myIngredientsEl = document.getElementById('my-ingredients');
   if (myIngredientsEl) {
     if (ingredients.length > 0) {
@@ -542,9 +616,9 @@ function updateMyIngredients(ingredients) {
           ingredientImageMap[ing.name] = ing.image_file;
         });
       }
-      
 
-      
+
+
       // สร้าง HTML สำหรับแสดงวัตถุดิบเป็นรูปภาพ
       const ingredientsHTML = ingredients.map(ingredient => {
         // หารูปภาพจาก mapping หรือใช้ชื่อวัตถุดิบ + .png
@@ -553,7 +627,7 @@ function updateMyIngredients(ingredients) {
           // ถ้าไม่มีใน mapping ให้ใช้ชื่อวัตถุดิบ + .png
           imageFile = `${ingredient}.png`;
         }
-        
+
         return `
           <div class="inline-flex items-center bg-green-100 rounded-lg px-2 py-1 mr-2 mb-2 shadow-sm border border-green-200">
             <div class="w-10 h-10 bg-white rounded-md mr-2 flex items-center justify-center overflow-hidden border border-green-300">
@@ -587,7 +661,7 @@ function updateCookableMealsUI(cookableMeals) {
   document.querySelectorAll('.cook-meal-btn').forEach(btn => {
     const mealName = btn.dataset.meal;
     const canCook = cookableMeals.some(meal => meal.meal_name === mealName);
-    
+
     if (canCook) {
       btn.classList.remove('bg-green-500', 'hover:bg-green-600');
       btn.classList.add('bg-orange-500', 'hover:bg-orange-600', 'animate-pulse');
@@ -673,21 +747,21 @@ function showQuestion() {
     showSummary();
     return;
   }
-  
+
   // ล้าง timer เก่าก่อน (ถ้ามี)
   if (currentQuestionTimer) {
     clearInterval(currentQuestionTimer);
     currentQuestionTimer = null;
   }
-  
+
   let timeLeft = 20; // 20 วินาทีต่อข้อ
   answered = false;
   selectedAnswerIdx = null;
   startTime = Date.now();
   let questionEnded = false;
-  
+
   const gameArea = document.getElementById('game-area');
-  
+
   // สร้างปุ่มตัวเลือก
   let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
     let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
@@ -710,7 +784,7 @@ function showQuestion() {
       </div>
     `;
   }
-  
+
   gameArea.innerHTML = `
       <div class="mb-4">
         <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion + 1}: ${q.question_text}</div>
@@ -743,18 +817,18 @@ function showQuestion() {
         }).then((result) => {
           if (result.isConfirmed) {
             // ส่งคำสั่งไปยัง server เพื่อไปข้อถัดไป
-            socket.emit('owner_force_next_question', { 
-              roomId: window.roomId || roomId, 
-              questionIndex: currentQuestion 
+            socket.emit('owner_force_next_question', {
+              roomId: window.roomId || roomId,
+              questionIndex: currentQuestion
             });
-            
+
             // หยุด timer ปัจจุบัน
             clearQuestionTimeout();
             if (currentQuestionTimer) {
               clearInterval(currentQuestionTimer);
               currentQuestionTimer = null;
             }
-            
+
             // แสดงข้อความแจ้งเตือน
             showNotification('เจ้าของห้องข้ามไปข้อถัดไป', 'info');
           }
@@ -772,10 +846,10 @@ function showQuestion() {
 function updateMyShopUI() {
   // อัปเดตคะแนนในทุกที่ที่แสดง
   updateMyScore(myPoints);
-  
+
   // อัปเดตวัตถุดิบ - ใช้ฟังก์ชัน updateMyIngredients แทน textContent
   updateMyIngredients(myIngredients);
-  
+
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(user.id, myIngredients);
 }
@@ -784,24 +858,24 @@ socket.on('update_points_ingredients', data => {
   if (data.userId === user.id) {
     // ป้องกัน undefined และ NaN
     const newPoints = typeof data.points === 'number' && !isNaN(data.points) ? data.points : currentPlayerScore;
-    
+
     myPoints = newPoints;
     myIngredients = data.ingredients || [];
     currentPlayerScore = newPoints; // ซิงค์ค่า
     playerIngredients = data.ingredients || []; // ซิงค์ค่า
-    
+
     console.log('Update points/ingredients:', {
       points: newPoints,
       ingredients: data.ingredients,
       food: data.food
     });
-    
+
     // อัปเดตคะแนนในทุกที่ที่แสดง
     updateMyScore(newPoints);
-    
+
     // อัปเดตวัตถุดิบใน player list
     updatePlayerIngredientsInList(user.id, data.ingredients);
-    
+
     // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
     if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
       myFood = data.food;
@@ -837,7 +911,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // จัดการปุ่มลบห้อง (เฉพาะเจ้าของห้อง)
   const deleteRoomBtn = document.getElementById('delete-room-btn');
   if (deleteRoomBtn && isOwner) {
-    deleteRoomBtn.onclick = function() {
+    deleteRoomBtn.onclick = function () {
       Swal.fire({
         title: 'ยืนยันการลบห้อง',
         text: 'คุณต้องการลบห้องนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถยกเลิกได้',
@@ -855,28 +929,49 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  // จัดการปุ่มรีเซ็ตเกม (เฉพาะเจ้าของห้อง)
+  const resetGameBtn = document.getElementById('reset-game-btn');
+  if (resetGameBtn && isOwner) {
+    resetGameBtn.onclick = function () {
+      Swal.fire({
+        title: 'ยืนยันการรีเซ็ตเกม',
+        text: 'คุณต้องการรีเซ็ตเกมใช่หรือไม่? คะแนนและวัตถุดิบทั้งหมดจะถูกลบ',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'รีเซ็ตเกม',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#3b82f6',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          socket.emit('reset_game', roomId, user.id);
+        }
+      });
+    };
+  }
+
 
 
   // Event Listeners สำหรับปุ่มต่างๆ - รวมจากไฟล์แรก
-  document.addEventListener('click', function(e) {
+  document.addEventListener('click', function (e) {
     // ปุ่มซื้อวัตถุดิบ
     if (e.target.classList.contains('ingredient-btn')) {
       const ingredientName = e.target.dataset.ingredient;
       buyIngredient(ingredientName);
     }
-    
+
     // ปุ่มทำอาหาร
     if (e.target.classList.contains('cook-meal-btn')) {
       const mealName = e.target.dataset.meal;
       const requiredIngredients = e.target.dataset.ingredients;
       cookMeal(mealName, requiredIngredients);
     }
-    
+
     // ปุ่มสุ่มอาหาร
     if (e.target.id === 'random-food-btn') {
       socket.emit('random_food', { roomId, userId: user.id });
     }
-    
+
     // ปุ่มตอบคำถาม (ถ้ามี)
     if (e.target.classList.contains('answer-btn')) {
       const answer = e.target.dataset.answer;
@@ -890,18 +985,18 @@ document.addEventListener('DOMContentLoaded', () => {
   if (window.roomId || roomId) {
     socket.emit('get-ingredients', { roomId: window.roomId || roomId });
   }
-  
+
   // ดึงวัตถุดิบของผู้เล่น
   if (window.roomId || roomId) {
-    socket.emit('get_player_ingredients', { 
-      roomId: window.roomId || roomId, 
-      userId: user.id 
+    socket.emit('get_player_ingredients', {
+      roomId: window.roomId || roomId,
+      userId: user.id
     });
   }
-  
+
   // โหลดประวัติการทำอาหาร
   loadCookingHistory();
-  
+
   // เพิ่ม event listener สำหรับปุ่มรีเฟรชประวัติ
   const refreshHistoryBtn = document.getElementById('refresh-history-btn');
   if (refreshHistoryBtn) {
@@ -911,7 +1006,7 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshHistoryBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>เสร็จแล้ว!';
       refreshHistoryBtn.classList.add('bg-green-500', 'hover:bg-green-600');
       refreshHistoryBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
-      
+
       setTimeout(() => {
         refreshHistoryBtn.innerHTML = '<i class="fa-solid fa-refresh mr-1"></i>รีเฟรช';
         refreshHistoryBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
@@ -919,7 +1014,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 1000);
     });
   }
-  
+
   updateMyShopUI();
 });
 
@@ -932,18 +1027,23 @@ socket.on('owner_forced_next_question', (data) => {
       clearInterval(currentQuestionTimer);
       currentQuestionTimer = null;
     }
-    
+
     // แสดงเฉลยทันที
     showAnswer();
-    
+
     // แสดงข้อความแจ้งเตือน
     showNotification('เจ้าของห้องข้ามไปข้อถัดไป', 'warning');
-    
+
     // ไปข้อถัดไปหลังจาก 2 วินาที
     setTimeout(() => {
       currentQuestion++;
       selectedAnswerIdx = null;
       answered = false;
+
+      // บันทึกสถานะเกม
+      gameState.currentQuestion = currentQuestion;
+      saveGameState();
+
       if (currentQuestion < questions.length) {
         showQuestion();
       } else {
@@ -959,14 +1059,14 @@ socket.on('owner_forced_next_question', (data) => {
 if (isOwner) {
   const startBtn = document.getElementById('start-btn');
   const nextBtn = document.getElementById('next-btn');
-  
+
   if (startBtn) {
     startBtn.onclick = () => {
       socket.emit('request_questions', roomId);
       startBtn.classList.add('hidden');
     };
   }
-  
+
   // ปรับปรุงปุ่ม next-btn ให้ทำงานเหมือนปุ่มใหม่
   if (nextBtn) {
     nextBtn.onclick = () => {
@@ -982,9 +1082,9 @@ if (isOwner) {
         cancelButtonColor: '#6b7280'
       }).then((result) => {
         if (result.isConfirmed) {
-          socket.emit('owner_force_next_question', { 
-            roomId: window.roomId || roomId, 
-            questionIndex: currentQuestion 
+          socket.emit('owner_force_next_question', {
+            roomId: window.roomId || roomId,
+            questionIndex: currentQuestion
           });
         }
       });
@@ -997,12 +1097,12 @@ if (isOwner) {
 // ===============================
 function sendAnswer(selectedAnswer) {
   console.log(`Sending answer: ${selectedAnswer} to room: ${window.roomId || roomId}`);
-  
+
   socket.emit('answer-question', {
     roomId: window.roomId || roomId,
     answer: selectedAnswer
   });
-  
+
   // ปิดการใช้งานปุ่มหลังจากตอบ
   const answerButtons = document.querySelectorAll('.answer-btn');
   answerButtons.forEach(btn => {
@@ -1025,10 +1125,67 @@ function randomFood() {
     });
     return;
   }
-  
+
   // ใช้ socket.emit แทนการสุ่มใน client
   socket.emit('random_food', { roomId: window.roomId || roomId, userId: user.id });
 }
+
+// รับสถานะเกมที่โหลดมา
+socket.on('game_state_loaded', ({ gameState: loadedGameState }) => {
+  console.log('Loaded game state from socket:', loadedGameState);
+  gameState = loadedGameState;
+
+  // อัปเดต currentQuestion จากสถานะเกม
+  currentQuestion = gameState.currentQuestion || 0;
+
+  // ถ้าเกมเริ่มแล้ว ให้แสดงคำถามปัจจุบัน
+  if (gameState.gameStarted && !gameState.gameFinished) {
+    console.log('Game is in progress, current question:', currentQuestion);
+
+    // ถ้ามีคำถามใน questions array และยังไม่จบเกม
+    if (questions && questions.length > 0 && currentQuestion < questions.length) {
+      // ซ่อน waiting area
+      const waitingArea = document.getElementById('waiting-area');
+      if (waitingArea) {
+        waitingArea.classList.add('hidden');
+      }
+
+      // ซ่อนปุ่มเริ่มเกม (ถ้าไม่ใช่เจ้าของห้อง)
+      if (!isOwner) {
+        const startBtn = document.getElementById('start-btn');
+        if (startBtn) {
+          startBtn.classList.add('hidden');
+        }
+      }
+
+      // แสดงคำถามปัจจุบัน
+      showQuestion();
+
+      // ตรวจสอบว่าตอบคำถามนี้แล้วหรือยัง
+      if (gameState.answeredQuestions[currentQuestion]) {
+        answered = true;
+        selectedAnswerIdx = gameState.answeredQuestions[currentQuestion].answerIndex;
+
+        // แสดงปุ่มที่เลือกไว้
+        document.querySelectorAll('.choice-btn').forEach((btn, idx) => {
+          if (idx === selectedAnswerIdx) {
+            btn.classList.add('ring-4', 'ring-green-400');
+          }
+          btn.disabled = true;
+        });
+
+        // แสดงข้อความรอผู้เล่นอื่น
+        const waitingEl = document.getElementById('waiting-answers');
+        if (waitingEl) {
+          waitingEl.classList.remove('hidden');
+        }
+      }
+    } else if (currentQuestion >= questions.length) {
+      // ถ้าเกมจบแล้ว ให้แสดงสรุป
+      showSummary();
+    }
+  }
+});
 
 // รับ event อาหารที่สุ่มได้เมื่อเข้าห้อง
 socket.on('foods_assigned', data => {
@@ -1117,7 +1274,7 @@ function updatePlayerList(players) {
   players.forEach(player => {
     if (player && player.id && player.name !== undefined) {
       const score = player.score || 0;
-      
+
       list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${score}</span></li>`;
       scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold"><span id="score-${player.id}">${score}</span></span></li>`;
     } else {
@@ -1150,14 +1307,26 @@ socket.on('update_room_player_count', data => {
 
 // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ
 window.addEventListener('beforeunload', () => {
-  // ไม่ต้องส่ง leave_room event เพื่อไม่ให้ลบข้อมูลคะแนน
-  console.log('User leaving page, preserving score data');
+  // บันทึกสถานะเกมก่อนออกจากหน้า
+  if (gameState.gameStarted) {
+    const isGameReallyFinished = gameState.currentQuestion >= 14;
+    if (!isGameReallyFinished) {
+      saveGameState();
+    }
+  }
+  console.log('User leaving page, preserving game state');
 });
 
 // จัดการเมื่อผู้ใช้กดปุ่มย้อนกลับ
 window.addEventListener('popstate', () => {
-  // ไม่ต้องส่ง leave_room event เพื่อไม่ให้ลบข้อมูลคะแนน
-  console.log('User navigating back, preserving score data');
+  // บันทึกสถานะเกมก่อนออกจากหน้า
+  if (gameState.gameStarted) {
+    const isGameReallyFinished = gameState.currentQuestion >= 14;
+    if (!isGameReallyFinished) {
+      saveGameState();
+    }
+  }
+  console.log('User navigating back, preserving game state');
 });
 
 // Owner starts game
@@ -1167,6 +1336,16 @@ if (isOwner) {
   
   if (startBtn) {
     startBtn.onclick = () => {
+      // ซ่อนสรุปผลคะแนนเมื่อเริ่มเกมใหม่
+      const gameArea = document.getElementById('game-area');
+      if (gameArea) {
+        gameArea.innerHTML = `
+          <div id="waiting-area" class="text-center text-lg text-gray-500">
+            <span id="waiting-message">กำลังโหลดคำถาม...</span>
+          </div>
+        `;
+      }
+      
       // Show question select modal
       socket.emit('request_questions', roomId);
       startBtn.classList.add('hidden');
@@ -1204,7 +1383,7 @@ socket.on('select_questions', function (questions) {
       
       <div class="question-grid grid grid-cols-2 gap-3 max-h-[512px] overflow-y-auto mb-4 p-4 bg-gray-50 rounded-xl">
   `;
-  
+
   questions.forEach((q, i) => {
     questionsHtml += `
       <label class="question-card flex items-start gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 hover:bg-purple-50 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-md">
@@ -1221,7 +1400,7 @@ socket.on('select_questions', function (questions) {
       </label>
     `;
   });
-  
+
   questionsHtml += `
       </div>
       
@@ -1306,12 +1485,12 @@ socket.on('select_questions', function (questions) {
       const checkboxes = document.querySelectorAll('.q-checkbox');
       const alert14 = document.getElementById('question-select-alert');
       const selectedCount = document.getElementById('selected-count');
-      
+
       // ฟังก์ชันอัปเดต UI
       const updateUI = () => {
         const checkedCount = document.querySelectorAll('.q-checkbox:checked').length;
         selectedCount.textContent = checkedCount;
-        
+
         // อัปเดตสีของ counter
         const counterElement = document.querySelector('.bg-purple-100, .bg-orange-100, .bg-green-100');
         if (checkedCount === 14) {
@@ -1338,23 +1517,23 @@ socket.on('select_questions', function (questions) {
         randomSelectBtn.addEventListener('click', () => {
           // ยกเลิกการเลือกทั้งหมดก่อน
           checkboxes.forEach(cb => cb.checked = false);
-          
+
           // สุ่มเลือก 14 ข้อ
           const allCheckboxes = Array.from(checkboxes);
           const shuffled = allCheckboxes.sort(() => 0.5 - Math.random());
           const selected = shuffled.slice(0, 14);
-          
+
           // เลือกคำถามที่สุ่มได้
           selected.forEach(cb => cb.checked = true);
-          
+
           // อัปเดต UI
           updateUI();
-          
+
           // แสดง animation ที่ปุ่มสุ่ม
           randomSelectBtn.innerHTML = '<i class="fa-solid fa-check"></i> สุ่มเสร็จแล้ว!';
           randomSelectBtn.classList.add('bg-green-500', 'hover:bg-green-600');
           randomSelectBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
-          
+
           setTimeout(() => {
             randomSelectBtn.innerHTML = '<i class="fa-solid fa-dice"></i> สุ่มเลือก 14 ข้อ';
             randomSelectBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
@@ -1376,10 +1555,10 @@ socket.on('select_questions', function (questions) {
       const selectedQuestions = result.value;
       // Send selected question ids to backend
       socket.emit('questions_selected', roomId, selectedQuestions);
-      
+
       // Start game immediately without countdown
       socket.emit('start_game', roomId, user.id);
-      
+
       // แสดง SweetAlert แจ้งว่ากำลังเริ่มเกม
       Swal.fire({
         title: '<div class="flex items-center gap-3"><i class="fa-solid fa-rocket text-purple-600"></i><span>กำลังเริ่มเกม...</span></div>',
@@ -1400,17 +1579,81 @@ socket.on('select_questions', function (questions) {
 
 // รับชุดคำถามที่ใช้เล่นจริง (ทุกคนในห้อง)
 socket.on('game_questions', function (selectedQuestions) {
+  console.log('Received game questions:', selectedQuestions);
+  
   // ใช้ลำดับคำถามที่ backend ส่งมา (ไม่ต้อง shuffle อีก)
   questions = selectedQuestions;
-  currentQuestion = 0;
-  document.getElementById('waiting-area')?.classList.add('hidden');
-  if (!isOwner) {
-    document.getElementById('start-btn')?.classList.add('hidden');
+  
+  // อัปเดต currentQuestion จากสถานะเกม (ถ้ามี)
+  if (gameState && gameState.currentQuestion !== undefined) {
+    currentQuestion = gameState.currentQuestion;
+    console.log('Updated currentQuestion from game state:', currentQuestion);
+  } else {
+    currentQuestion = 0;
   }
-  // เริ่มเกมด้วยฟังก์ชั่น runGame
-  runGame();
+  
+  // ซ่อน waiting area และแสดงคำถาม
+  const waitingArea = document.getElementById('waiting-area');
+  if (waitingArea) {
+    waitingArea.classList.add('hidden');
+  }
+  
+  if (!isOwner) {
+    const startBtn = document.getElementById('start-btn');
+    if (startBtn) {
+      startBtn.classList.add('hidden');
+    }
+  }
+
+  // ตรวจสอบว่าต้องเริ่มเกมใหม่หรือไม่
+  if (!gameState.gameStarted) {
+    // เริ่มเกมใหม่
+    runGame();
+  } else {
+    // เกมเริ่มแล้ว ให้ตรวจสอบว่าเกมจบจริงหรือไม่
+    const isGameReallyFinished = gameState.currentQuestion >= 14;
+    if (!isGameReallyFinished) {
+      // เกมยังไม่จบ ให้แสดงคำถามปัจจุบัน
+      console.log('Game already started, showing current question:', currentQuestion);
+      if (currentQuestion < questions.length) {
+        showQuestion();
+
+        // ตรวจสอบว่าตอบคำถามนี้แล้วหรือยัง
+        if (gameState.answeredQuestions && gameState.answeredQuestions[currentQuestion]) {
+          answered = true;
+          selectedAnswerIdx = gameState.answeredQuestions[currentQuestion].answerIndex;
+
+          // แสดงปุ่มที่เลือกไว้
+          document.querySelectorAll('.choice-btn').forEach((btn, idx) => {
+            if (idx === selectedAnswerIdx) {
+              btn.classList.add('ring-4', 'ring-green-400');
+            }
+            btn.disabled = true;
+          });
+
+          // แสดงข้อความรอผู้เล่นอื่น
+          const waitingEl = document.getElementById('waiting-answers');
+          if (waitingEl) {
+            waitingEl.classList.remove('hidden');
+          }
+        }
+      } else {
+        showSummary();
+      }
+    } else {
+      // เกมจบแล้ว ให้แสดงสรุป
+      console.log('Game is finished, showing summary');
+      showSummary();
+    }
+  }
+
   // ฟังก์ชั่นหลักสำหรับรันเกมทีละข้อ
   function runGame() {
+    // บันทึกสถานะเกมเริ่ม
+    gameState.gameStarted = true;
+    gameState.currentQuestion = currentQuestion;
+    saveGameState();
+
     if (currentQuestion >= questions.length) {
       showSummary();
       return;
@@ -1471,15 +1714,21 @@ socket.on('game_questions', function (selectedQuestions) {
 // Listen for game start (question UI)
 let selectedAnswerIdx = null;
 socket.on('game_started', () => {
+  console.log('Game started event received');
   if (gameStartHandled) return;
   gameStartHandled = true;
-  
+
+  // บันทึกสถานะเกมเริ่ม
+  gameState.gameStarted = true;
+  gameState.currentQuestion = currentQuestion;
+  saveGameState();
+
   // Enable ingredient shop
   enableIngredientShop();
-  
+
   // Trigger food randomization for this user
   socket.emit('random_food', { roomId, userId: user.id });
-  
+
   // Start the actual game immediately
   selectedAnswerIdx = null;
   showQuestion();
@@ -1497,9 +1746,15 @@ socket.on('game_started', () => {
 
 // Listen for next question
 socket.on('next_question', () => {
+  console.log('Next question event received');
   currentQuestion++;
   selectedAnswerIdx = null;
   answered = false;
+
+  // บันทึกสถานะเกม
+  gameState.currentQuestion = currentQuestion;
+  saveGameState();
+
   showQuestion();
 });
 
@@ -1514,28 +1769,28 @@ function showQuestion() {
     showSummary();
     return;
   }
-  
+
   // ล้าง timer เก่าก่อน (ถ้ามี)
   if (currentQuestionTimer) {
     clearInterval(currentQuestionTimer);
     currentQuestionTimer = null;
   }
-  
+
   let timeLeft = 20; // 20 วินาทีต่อข้อ
   answered = false;
   selectedAnswerIdx = null; // รีเซ็ตคำตอบที่เลือก
   startTime = Date.now();
   let questionEnded = false;
-  
+
   const gameArea = document.getElementById('game-area');
-  
+
   // สร้างปุ่มตัวเลือก
   let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
     let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
     if (selectedAnswerIdx !== null && selectedAnswerIdx == i) btnClass += ' ring-4 ring-green-400';
     return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${c}</button>`;
   }).join('');
-  
+
   gameArea.innerHTML = `
       <div class="mb-4">
         <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion + 1}: ${q.question_text}</div>
@@ -1548,18 +1803,18 @@ function showQuestion() {
       </div>
       <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
     `;
-  
+
   // ล้าง fallback timeout ก่อนหน้าและเริ่มใหม่
   clearQuestionTimeout();
   startQuestionTimeout();
-  
+
   // จับเวลา
   currentQuestionTimer = setInterval(() => {
     timeLeft--;
     const timerEl = document.getElementById('question-timer');
     if (timerEl) {
       timerEl.textContent = timeLeft;
-      
+
       // เปลี่ยนสีตามเวลาที่เหลือ
       if (timeLeft <= 5) {
         timerEl.className = 'text-red-600 font-bold';
@@ -1567,90 +1822,98 @@ function showQuestion() {
         timerEl.className = 'text-orange-600 font-bold';
       }
     }
-    
+
     if (timeLeft <= 0) {
       clearInterval(currentQuestionTimer);
       currentQuestionTimer = null;
       endQuestion();
     }
   }, 1000);
-  
+
   // ฟังก์ชันจบคำถาม
   function endQuestion() {
     if (questionEnded) return;
     questionEnded = true;
-    
+
     // เวลาหมด - ปิดการตอบ
     document.querySelectorAll('.choice-btn').forEach(btn => {
       btn.disabled = true;
       btn.classList.add('opacity-50');
     });
-    
+
     // ซ่อนตัวจับเวลา
     const timerEl = document.getElementById('question-timer');
     if (timerEl && timerEl.parentElement) {
       timerEl.parentElement.style.display = 'none';
     }
-    
+
     // แสดงข้อความรอผู้เล่นอื่น
     const waitingEl = document.getElementById('waiting-answers');
     if (waitingEl) {
       waitingEl.classList.remove('hidden');
     }
-    
+
     // ส่งคำตอบว่าไม่ได้ตอบ (answerIndex = -1)
     if (!answered) {
       answered = true;
-      socket.emit('submit_answer', { 
-        roomId, 
-        userId: user.id, 
-        answerIndex: -1, 
+      socket.emit('submit_answer', {
+        roomId,
+        userId: user.id,
+        answerIndex: -1,
         answerTime: 20000, // 20 วินาที
         questionIndex: currentQuestion,
         currentQuestion: questions[currentQuestion]
       });
     }
-    
+
     // แจ้ง backend ว่าคำถามนี้จบแล้ว
-    socket.emit('question_ended', { 
-      roomId, 
+    socket.emit('question_ended', {
+      roomId,
       questionIndex: currentQuestion,
       currentQuestion: questions[currentQuestion]
     });
-    
+
     // รอ 1 วินาทีแล้วจบคำถาม (fallback)
     setTimeout(() => {
       if (!questionEnded) {
-        socket.emit('question_ended', { 
-          roomId, 
+        socket.emit('question_ended', {
+          roomId,
           questionIndex: currentQuestion,
           currentQuestion: questions[currentQuestion]
         });
       }
     }, 1000);
   }
-  
+
   // Event handlers สำหรับปุ่มตัวเลือก
   document.querySelectorAll('.choice-btn').forEach(btn => {
     btn.onclick = () => {
       if (answered || selectedAnswerIdx !== null || questionEnded) return;
-      
+
       answered = true;
       clearInterval(currentQuestionTimer); // หยุดจับเวลา
       currentQuestionTimer = null;
-      
+
       selectedAnswerIdx = parseInt(btn.getAttribute('data-idx'));
       const answerTime = Date.now() - startTime;
-      
-      socket.emit('submit_answer', { 
-        roomId, 
-        userId: user.id, 
-        answerIndex: selectedAnswerIdx, 
+
+      // บันทึกคำตอบในสถานะเกม
+      gameState.answeredQuestions[currentQuestion] = {
+        answerIndex: selectedAnswerIdx,
+        answerTime: answerTime,
+        isCorrect: false, // จะถูกอัปเดตจาก backend
+        scoreGained: 0 // จะถูกอัปเดตจาก backend
+      };
+
+      socket.emit('submit_answer', {
+        roomId,
+        userId: user.id,
+        answerIndex: selectedAnswerIdx,
         answerTime,
         questionIndex: currentQuestion,
         currentQuestion: questions[currentQuestion]
       });
-      
+
       // แสดงปุ่มที่เลือกค้างไว้
       document.querySelectorAll('.choice-btn').forEach((b, idx) => {
         if (idx === selectedAnswerIdx) {
@@ -1658,19 +1921,19 @@ function showQuestion() {
         }
         b.disabled = true;
       });
-      
+
       // แสดงข้อความรอผู้เล่นอื่น
       const waitingEl = document.getElementById('waiting-answers');
       if (waitingEl) {
         waitingEl.classList.remove('hidden');
       }
-      
+
       // ซ่อนตัวจับเวลา
       const timerEl = document.getElementById('question-timer');
       if (timerEl && timerEl.parentElement) {
         timerEl.parentElement.style.display = 'none';
       }
-      
+
       // แจ้ง backend ว่าตอบแล้ว (เพื่อให้ระบบรู้ว่าควรจบคำถามหรือยัง)
       socket.emit('answer_submitted', { roomId, questionIndex: currentQuestion });
     };
@@ -1682,15 +1945,22 @@ socket.on('question_ended', (data) => {
   if (data.questionIndex === currentQuestion) {
     // ล้าง fallback timeout
     clearQuestionTimeout();
-    
+
+    // อัปเดตสถานะเกมจาก backend
+    gameState.currentQuestion = data.questionIndex + 1;
+
     // แสดงเฉลยหลังจาก 2 วินาที
     setTimeout(() => {
       showAnswer();
       // ไปข้อถัดไปหลังจาก 3 วินาที
       setTimeout(() => {
-        currentQuestion++;
+        currentQuestion = gameState.currentQuestion;
         selectedAnswerIdx = null; // รีเซ็ตคำตอบที่เลือก
         answered = false; // รีเซ็ตสถานะการตอบ
+
+        // บันทึกสถานะเกม
+        saveGameState();
+
         if (currentQuestion < questions.length) {
           showQuestion();
         } else {
@@ -1712,6 +1982,11 @@ function startQuestionTimeout() {
       currentQuestion++;
       selectedAnswerIdx = null; // รีเซ็ตคำตอบที่เลือก
       answered = false; // รีเซ็ตสถานะการตอบ
+
+      // บันทึกสถานะเกม
+      gameState.currentQuestion = currentQuestion;
+      saveGameState();
+
       if (currentQuestion < questions.length) {
         showQuestion();
       } else {
@@ -1742,22 +2017,29 @@ socket.on('user_answered', data => {
     if (scoreEl) {
       scoreEl.textContent = data.score;
     }
-    
+
     // อัปเดตคะแนนใน player list ด้วย
     const playerScoreEl = document.querySelector(`#player-li-${data.userId} .text-green-600`);
     if (playerScoreEl) {
       playerScoreEl.textContent = `+${data.score}`;
     }
-    
+
     // ถ้าเป็นผู้เล่นเอง ให้อัปเดตคะแนนในส่วน "แต้มของคุณ" ด้วย
     if (data.userId === user.id) {
       updateMyScore(data.score);
     }
   }
-  
+
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
   if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
     selectedAnswerIdx = parseInt(data.answerIndex);
+
+    // อัปเดตสถานะเกมด้วยข้อมูลจาก backend
+    if (gameState.answeredQuestions[data.questionIndex]) {
+      gameState.answeredQuestions[data.questionIndex].isCorrect = data.isCorrect;
+      gameState.answeredQuestions[data.questionIndex].scoreGained = data.scoreGained;
+    }
+
     // อัปเดตปุ่มให้ active
     document.querySelectorAll('.choice-btn').forEach((b, idx) => {
       if (idx === selectedAnswerIdx) {
@@ -1765,7 +2047,7 @@ socket.on('user_answered', data => {
       }
       b.disabled = true;
     });
-    
+
     // แสดง animation คะแนนที่ได้
     if (data.isCorrect && data.scoreGained > 0) {
       showScoreGainAnimation(data.scoreGained);
@@ -1784,11 +2066,11 @@ socket.on('answer-question', ({ roomId, answer }) => {
 function showAnswer() {
   const q = questions[currentQuestion];
   if (!q) return;
-  
+
   const gameArea = document.getElementById('game-area');
   const correctAnswer = [q.choice1, q.choice2, q.choice3, q.choice4][q.answer_index - 1];
   const correctIndex = q.answer_index - 1;
-  
+
   // แสดงเฉลยและผลลัพธ์
   gameArea.innerHTML += `
     <div class="mt-4 p-6 bg-gradient-to-r from-green-50 to-blue-50 rounded-xl border-2 border-green-200">
@@ -1799,38 +2081,38 @@ function showAnswer() {
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         ${[q.choice1, q.choice2, q.choice3, q.choice4].map((choice, idx) => {
-          let choiceClass = 'p-3 rounded-lg border-2 font-semibold';
-          if (idx === correctIndex) {
-            choiceClass += ' bg-green-200 border-green-500 text-green-800';
-          } else if (idx === selectedAnswerIdx) {
-            choiceClass += ' bg-red-200 border-red-500 text-red-800';
-          } else {
-            choiceClass += ' bg-gray-100 border-gray-300 text-gray-600';
-          }
-          
-          let icon = '';
-          if (idx === correctIndex) {
-            icon = '✅';
-          } else if (idx === selectedAnswerIdx && idx !== correctIndex) {
-            icon = '❌';
-          }
-          
-          return `
+    let choiceClass = 'p-3 rounded-lg border-2 font-semibold';
+    if (idx === correctIndex) {
+      choiceClass += ' bg-green-200 border-green-500 text-green-800';
+    } else if (idx === selectedAnswerIdx) {
+      choiceClass += ' bg-red-200 border-red-500 text-red-800';
+    } else {
+      choiceClass += ' bg-gray-100 border-gray-300 text-gray-600';
+    }
+
+    let icon = '';
+    if (idx === correctIndex) {
+      icon = '✅';
+    } else if (idx === selectedAnswerIdx && idx !== correctIndex) {
+      icon = '❌';
+    }
+
+    return `
             <div class="${choiceClass}">
               ${icon} ${choice}
             </div>
           `;
-        }).join('')}
+  }).join('')}
       </div>
       
       <div class="mt-4 text-center">
         <div class="text-gray-600 text-sm">
-          ${selectedAnswerIdx === correctIndex ? 
-            '🎉 ยินดีด้วย! คุณตอบถูก!' : 
-            selectedAnswerIdx !== null ? 
-            '😔 ไม่เป็นไร ลองข้อถัดไปดู!' : 
-            '⏰ เวลาหมดแล้ว!'
-          }
+          ${selectedAnswerIdx === correctIndex ?
+      '🎉 ยินดีด้วย! คุณตอบถูก!' :
+      selectedAnswerIdx !== null ?
+        '😔 ไม่เป็นไร ลองข้อถัดไปดู!' :
+        '⏰ เวลาหมดแล้ว!'
+    }
         </div>
       </div>
     </div>
@@ -1841,39 +2123,87 @@ function showAnswer() {
 function showSummary() {
   const gameArea = document.getElementById('game-area');
   
+  // บันทึกสถานะเกมจบ
+  gameState.gameFinished = true;
+  gameState.currentQuestion = questions ? questions.length : 14; // ตั้งค่าเป็นจำนวนคำถามทั้งหมด
+  saveGameState();
+  
+  // รีเซ็ตข้อมูลอัตโนมัติหลังจบเกม
+  setTimeout(() => {
+    // รีเซ็ตสถานะเกม
+    gameState = {
+      currentQuestion: 0,
+      answeredQuestions: [],
+      gameStarted: false,
+      gameFinished: false
+    };
+    
+    // รีเซ็ตตัวแปรเกม
+    currentQuestion = 0;
+    answered = false;
+    selectedAnswerIdx = null;
+    questions = [];
+    
+    // รีเซ็ตคะแนนและวัตถุดิบ
+    currentPlayerScore = 0;
+    myPoints = 0;
+    playerIngredients = [];
+    myIngredients = [];
+    
+    // อัปเดต UI
+    updateMyScore(0);
+    updateMyIngredients([]);
+    updatePlayerIngredientsInList(user.id, []);
+    
+    // แสดงปุ่มเริ่มเกมสำหรับเจ้าของห้อง
+    if (isOwner) {
+      const startBtn = document.getElementById('start-btn');
+      if (startBtn) {
+        startBtn.classList.remove('hidden');
+      }
+      const resetBtn = document.getElementById('reset-game-btn');
+      if (resetBtn) {
+        resetBtn.classList.add('hidden');
+      }
+    }
+    
+    // เรียกใช้ฟังก์ชันรีเซ็ตอัตโนมัติใน backend
+    socket.emit('auto_reset_game', roomId);    
+  }, 1000);
+
   // ดึงคะแนนจาก DOM
   let playerEls = document.querySelectorAll('#score-list li');
   let players = [];
-  
+
   playerEls.forEach(li => {
     const nameMatch = li.textContent.match(/👤\s*(.*?)\s*\+/);
     const scoreMatch = li.querySelector('span[id^="score-"]');
-    
+
     if (nameMatch && scoreMatch) {
       const name = nameMatch[1];
       const score = parseInt(scoreMatch.textContent) || 0;
       players.push({ name, score });
     }
   });
-  
+
   // จัดอันดับ
   players.sort((a, b) => b.score - a.score);
-  
+
   let html = `
     <div class="text-center">
       <div class="text-4xl font-bold mb-8 text-purple-700">🏆 สรุปผลคะแนน 🏆</div>
       <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-3xl p-8 shadow-xl border-2 border-purple-200">
         <div class="grid gap-4">
   `;
-  
+
   players.forEach((p, idx) => {
     const rank = idx + 1;
     const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
     const bgClass = rank === 1 ? 'bg-gradient-to-r from-yellow-100 to-yellow-200 border-yellow-300' :
-                   rank === 2 ? 'bg-gradient-to-r from-gray-100 to-gray-200 border-gray-300' :
-                   rank === 3 ? 'bg-gradient-to-r from-orange-100 to-orange-200 border-orange-300' :
-                   'bg-white border-gray-200';
-    
+      rank === 2 ? 'bg-gradient-to-r from-gray-100 to-gray-200 border-gray-300' :
+        rank === 3 ? 'bg-gradient-to-r from-orange-100 to-orange-200 border-orange-300' :
+          'bg-white border-gray-200';
+
     html += `
       <div class="${bgClass} rounded-xl p-4 border-2 shadow-md">
         <div class="flex items-center justify-between">
@@ -1889,7 +2219,7 @@ function showSummary() {
       </div>
     `;
   });
-  
+
   html += `
         </div>
       </div>
@@ -1903,23 +2233,104 @@ function showSummary() {
       </div>
     </div>
   `;
-  
+
   gameArea.innerHTML = html;
 }
 
 // Initialize scores when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
+  console.log('DOM loaded, initial game state:', gameState);
+  console.log('Questions loaded:', questions ? questions.length : 0);
+
+  // อัปเดต currentQuestion จากสถานะเกมเริ่มต้น
+  if (gameState && gameState.currentQuestion !== undefined) {
+    currentQuestion = gameState.currentQuestion;
+    console.log('Updated currentQuestion from initial state:', currentQuestion);
+  }
+
+  // ถ้าเกมเริ่มแล้ว ให้ตรวจสอบว่าเกมจบจริงหรือไม่
+  if (gameState && gameState.gameStarted) {
+    // ตรวจสอบว่าเกมจบจริงหรือไม่ (14 คำถาม)
+    const isGameReallyFinished = gameState.currentQuestion >= 14;
+    if (!isGameReallyFinished) {
+      console.log('Game is in progress from initial state, current question:', currentQuestion);
+
+      // รอให้คำถามโหลดเสร็จก่อนแสดง
+      if (questions && questions.length > 0) {
+        console.log('Questions are loaded, showing current question');
+
+        // ถ้ายังไม่จบเกม
+        if (currentQuestion < questions.length) {
+          // ซ่อน waiting area
+          const waitingArea = document.getElementById('waiting-area');
+          if (waitingArea) {
+            waitingArea.classList.add('hidden');
+          }
+
+          // ซ่อนปุ่มเริ่มเกม (ถ้าไม่ใช่เจ้าของห้อง)
+          if (!isOwner) {
+            const startBtn = document.getElementById('start-btn');
+            if (startBtn) {
+              startBtn.classList.add('hidden');
+            }
+          }
+
+          // แสดงคำถามปัจจุบัน
+          showQuestion();
+
+          // ตรวจสอบว่าตอบคำถามนี้แล้วหรือยัง
+          if (gameState.answeredQuestions && gameState.answeredQuestions[currentQuestion]) {
+            answered = true;
+            selectedAnswerIdx = gameState.answeredQuestions[currentQuestion].answerIndex;
+
+            // แสดงปุ่มที่เลือกไว้
+            document.querySelectorAll('.choice-btn').forEach((btn, idx) => {
+              if (idx === selectedAnswerIdx) {
+                btn.classList.add('ring-4', 'ring-green-400');
+              }
+              btn.disabled = true;
+            });
+
+            // แสดงข้อความรอผู้เล่นอื่น
+            const waitingEl = document.getElementById('waiting-answers');
+            if (waitingEl) {
+              waitingEl.classList.remove('hidden');
+            }
+          }
+        } else {
+          // ถ้าเกมจบแล้ว ให้แสดงสรุป
+          showSummary();
+        }
+      } else {
+        console.log('Questions not loaded yet, waiting for socket event');
+      }
+    } else {
+      console.log('Game is finished, current question:', currentQuestion);
+    }
+  }
+
   // อัปเดตคะแนนเริ่มต้นใน UI ในทุกที่ที่แสดง
   updateMyScore(currentPlayerScore);
-  
+
   // อัปเดตวัตถุดิบเริ่มต้น
   updateMyIngredients(myIngredients);
-  
+
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(user.id, myIngredients);
-  
+
   console.log('Initial player score:', currentPlayerScore);
   console.log('Initial myPoints:', myPoints);
   console.log('Initial myIngredients:', myIngredients);
+  console.log('Initial game state:', gameState);
+
+  // บันทึกสถานะเกมเป็นระยะทุก 30 วินาที (ถ้าเกมกำลังดำเนินอยู่)
+  setInterval(() => {
+    if (gameState.gameStarted) {
+      const isGameReallyFinished = gameState.currentQuestion >= 14;
+      if (!isGameReallyFinished) {
+        saveGameState();
+      }
+    }
+  }, 30000);
 });
 

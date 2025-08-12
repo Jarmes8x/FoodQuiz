@@ -156,7 +156,7 @@ exports.createRoomPost = (req, res) => {
           }
           // ไม่ต้องเพิ่ม creator เป็นผู้เล่นใน room_players
           // สามารถเพิ่ม logic ให้ creator เลือกคำถามได้ในหน้า quiz หรือหน้า admin room
-          res.redirect('/quiz');
+          res.redirect('/dashboard');
         }
       );
     });
@@ -174,7 +174,7 @@ exports.gameRoomPage = (req, res) => {
     const roomId = req.params.roomId;
     usersDB.get('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id WHERE rooms.id = ?', [roomId], (err, room) => {
       if (err || !room) {
-        return res.status(404).render('quiz', { error: 'ไม่พบห้องนี้', layout: 'layouts/main' });
+        return res.status(404).render('dashboard', { error: 'ไม่พบห้องนี้', layout: 'layouts/main', user: req.user, rooms: [], users: [] });
       }
       // ดึงผู้เล่นในห้อง
       usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err2, players) => {
@@ -184,8 +184,10 @@ exports.gameRoomPage = (req, res) => {
           SELECT q.* FROM questions q 
           JOIN room_questions rq ON q.id = rq.question_id 
           WHERE rq.room_id = ?
+          ORDER BY rq.id ASC
         `, [roomId], (err3, questions) => {
           if (err3) questions = [];
+          console.log(`Loaded ${questions.length} questions for room ${roomId}:`, questions.map(q => q.id));
           // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient
           usersDB.all('SELECT name, price, image_file FROM ingredient', [], (err4, ingredients) => {
             if (err4) ingredients = [];
@@ -228,16 +230,35 @@ exports.gameRoomPage = (req, res) => {
                     playerIngredientsMap[pi.user_id] = pi.ingredients ? pi.ingredients.split(',') : [];
                   });
                   
-                  res.render('game-room', {
-                    layout: 'layouts/main',
-                    user: req.user,
-                    room,
-                    players,
-                    questions,
-                    ingredients,
-                    mealIngredients,
-                    playerFoods: playerFoodsMap,
-                    playerIngredients: playerIngredientsMap
+                  // ดึงสถานะเกมของผู้เล่น
+                  usersDB.get('SELECT * FROM game_state WHERE room_id = ? AND user_id = ?', [roomId, req.user.id], (err8, gameStateRow) => {
+                    if (err8) gameStateRow = null;
+                    
+                    let gameState = null;
+                    if (gameStateRow) {
+                      gameState = {
+                        currentQuestion: gameStateRow.current_question,
+                        answeredQuestions: JSON.parse(gameStateRow.answered_questions || '[]'),
+                        gameStarted: Boolean(gameStateRow.game_started),
+                        gameFinished: Boolean(gameStateRow.game_finished)
+                      };
+                      console.log(`Game state for user ${req.user.id} in room ${roomId}:`, gameState);
+                    } else {
+                      console.log(`No game state found for user ${req.user.id} in room ${roomId}`);
+                    }
+                    
+                    res.render('game-room', {
+                      layout: 'layouts/main',
+                      user: req.user,
+                      room,
+                      players,
+                      questions,
+                      ingredients,
+                      mealIngredients,
+                      playerFoods: playerFoodsMap,
+                      playerIngredients: playerIngredientsMap,
+                      gameState
+                    });
                   });
                 });
               });
@@ -248,7 +269,7 @@ exports.gameRoomPage = (req, res) => {
     });
   } catch (err) {
     console.error('GameRoomPage error:', err);
-    res.status(500).render('quiz', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
+    res.status(500).render('dashboard', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main', user: req.user, rooms: [], users: [] });
   }
 };
 

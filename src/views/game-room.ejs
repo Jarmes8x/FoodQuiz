@@ -1,13 +1,20 @@
 <script>
   // Pass data from EJS to JavaScript
+  // @ts-ignore
   window.user = <%- JSON.stringify({ id: user.id, name: user.name }) %>;
+  // @ts-ignore
   window.isOwner = <%= user.id === room.creator_id ? 'true' : 'false' %>;
+  // @ts-ignore
   window.questions = <%- JSON.stringify(questions) %>;
+  // @ts-ignore
   window.roomId = "<%= room.id %>";
+  // @ts-ignore
   window.playerFoods = <%- JSON.stringify(playerFoods || {}) %>;
   <% if (typeof playerIngredients !== 'undefined') { %>
+  // @ts-ignore
   window.playerIngredients = <%- JSON.stringify(playerIngredients) %>;
   <% } else { %>
+  // @ts-ignore
   window.playerIngredients = {};
   <% } %>
   <% 
@@ -18,9 +25,19 @@
       currentPlayerIngredients = playerIngredients[user.id];
     }
   %>
+  // @ts-ignore
   window.initialPlayerScore = <%= currentPlayerScore %>;
+  // @ts-ignore
   window.initialPlayerIngredients = <%- JSON.stringify(currentPlayerIngredients) %>;
+  // @ts-ignore
   window.ingredients = <%- JSON.stringify(ingredients || []) %>;
+  <% if (typeof gameState !== 'undefined' && gameState) { %>
+  // @ts-ignore
+  window.initialGameState = <%- JSON.stringify(gameState) %>;
+  <% } else { %>
+  // @ts-ignore
+  window.initialGameState = null;
+  <% } %>
 </script>
 <div class="container mx-auto px-4 py-8">
   <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
@@ -55,6 +72,9 @@
       <% if (user.id === room.creator_id) { %>
         <button id="start-btn" class="mt-4 bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">เริ่มเกม</button>
         <button id="next-btn" class="mt-4 bg-gradient-to-r from-[#ff8c42] to-[#ff6a6a] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">ข้อถัดไป</button>
+        <button id="reset-game-btn" class="mt-4 bg-gradient-to-r from-[#3b82f6] to-[#1d4ed8] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">
+          <i class="fa-solid fa-rotate mr-2"></i>รีเซ็ตเกม
+        </button>
 
         <button id="delete-room-btn" class="mt-4 bg-red-500 hover:bg-red-700 text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">ลบห้อง</button>
       <% } %>

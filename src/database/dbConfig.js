@@ -215,6 +215,28 @@ usersDB.serialize(() => {
       console.error("Error creating cooked_meals table:", err.message);
     }
   });
+
+  // Table: game_state (ตารางใหม่สำหรับเก็บสถานะเกม)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS game_state (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      current_question INTEGER DEFAULT 0,
+      answered_questions TEXT DEFAULT '[]',
+      game_started BOOLEAN DEFAULT 0,
+      game_finished BOOLEAN DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(room_id, user_id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating game_state table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close

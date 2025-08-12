@@ -3,6 +3,73 @@ const { assignRandomFoodsToPlayer } = require('./foodHandlers');
 
 const roomAnswers = {};
 
+// ฟังก์ชันสำหรับบันทึกสถานะเกม
+const saveGameState = async (roomId, userId, gameState) => {
+  try {
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run(`
+          INSERT OR REPLACE INTO game_state 
+          (room_id, user_id, current_question, answered_questions, game_started, game_finished, updated_at) 
+          VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `, [
+          roomId, 
+          userId, 
+          gameState.currentQuestion || 0,
+          JSON.stringify(gameState.answeredQuestions || []),
+          gameState.gameStarted ? 1 : 0,
+          gameState.gameFinished ? 1 : 0
+        ], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+  } catch (error) {
+    console.error('Error saving game state:', error);
+    throw error;
+  }
+};
+
+// ฟังก์ชันสำหรับดึงสถานะเกม
+const getGameState = async (roomId, userId) => {
+  try {
+    const gameState = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT * FROM game_state WHERE room_id = ? AND user_id = ?', 
+          [roomId, userId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        });
+      });
+    });
+
+    if (gameState) {
+      return {
+        currentQuestion: gameState.current_question,
+        answeredQuestions: JSON.parse(gameState.answered_questions || '[]'),
+        gameStarted: Boolean(gameState.game_started),
+        gameFinished: Boolean(gameState.game_finished)
+      };
+    }
+
+    return {
+      currentQuestion: 0,
+      answeredQuestions: [],
+      gameStarted: false,
+      gameFinished: false
+    };
+  } catch (error) {
+    console.error('Error getting game state:', error);
+    return {
+      currentQuestion: 0,
+      answeredQuestions: [],
+      gameStarted: false,
+      gameFinished: false
+    };
+  }
+};
+
 const updatePlayerList = async (io, roomId) => {
   try {
     const players = await executeWithRetry(async () => {
@@ -105,6 +172,44 @@ const setupRoomHandlers = (io, socket) => {
         }
       }
 
+      // ดึงสถานะเกมของผู้เล่น
+      const gameState = await getGameState(roomId, user.id);
+      console.log(`Game state for user ${user.id} in room ${roomId}:`, gameState);
+      socket.emit('game_state_loaded', { gameState });
+
+      // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
+      if (gameState && gameState.gameStarted) {
+        // ตรวจสอบว่าเกมจบจริงหรือไม่
+        const isGameReallyFinished = gameState.currentQuestion >= 14; // 14 คำถาม
+        if (!isGameReallyFinished) {
+          console.log(`Game is ongoing, current question: ${gameState.currentQuestion}/14`);
+          try {
+            const questions = await executeWithRetry(async () => {
+              return new Promise((resolve, reject) => {
+                usersDB.all(`
+                  SELECT q.* FROM questions q 
+                  JOIN room_questions rq ON q.id = rq.question_id 
+                  WHERE rq.room_id = ?
+                  ORDER BY rq.id ASC
+                `, [roomId], (err, rows) => {
+                  if (err) reject(err);
+                  else resolve(rows || []);
+                });
+              });
+            });
+            
+            if (questions.length > 0) {
+              console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
+              socket.emit('game_questions', questions);
+            }
+          } catch (error) {
+            console.error('Error loading questions for ongoing game:', error);
+          }
+        } else {
+          console.log(`Game is finished, current question: ${gameState.currentQuestion}/14`);
+        }
+      }
+
       io.to(`room_${roomId}`).emit('user_joined', { user, socketId: socket.id });
 
       // อัปเดตรายชื่อผู้เล่น
@@ -165,6 +270,25 @@ const setupRoomHandlers = (io, socket) => {
       if (!room || room.creator_id !== ownerId) {
         socket.emit('game_error', { message: 'ไม่มีสิทธิ์เริ่มเกม' });
         return;
+      }
+
+      // บันทึกสถานะเกมเริ่มต้นสำหรับทุกคนในห้อง
+      const players = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [roomId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
+        });
+      });
+
+      for (const player of players) {
+        await saveGameState(roomId, player.user_id, {
+          currentQuestion: 0,
+          answeredQuestions: [],
+          gameStarted: true,
+          gameFinished: false
+        });
       }
 
       // แจ้งทุกคนในห้องว่าเกมเริ่มแล้ว
@@ -312,6 +436,21 @@ const setupRoomHandlers = (io, socket) => {
           });
         });
 
+        // บันทึกสถานะเกม (คำตอบที่เลือก)
+        const currentGameState = await getGameState(data.roomId, data.userId);
+        const answeredQuestions = [...currentGameState.answeredQuestions];
+        answeredQuestions[data.questionIndex] = {
+          answerIndex: data.answerIndex,
+          answerTime: data.answerTime,
+          isCorrect: isCorrect,
+          scoreGained: scoreGained
+        };
+
+        await saveGameState(data.roomId, data.userId, {
+          ...currentGameState,
+          answeredQuestions: answeredQuestions
+        });
+
         // ส่งข้อมูลกลับไปยัง client พร้อมข้อมูลคะแนน
         io.to(`room_${data.roomId}`).emit('user_answered', { 
             ...data, 
@@ -358,6 +497,16 @@ const setupRoomHandlers = (io, socket) => {
 
       // ถ้าทุกคนตอบแล้ว หรือมีคนส่ง event นี้มา ให้จบคำถาม
       if (answeredUserIds.length >= players.length || answers.length > 0) {
+        // อัปเดตคำถามปัจจุบันสำหรับทุกคนในห้อง
+        const nextQuestionIndex = data.questionIndex + 1;
+        for (const player of players) {
+          const currentGameState = await getGameState(data.roomId, player.user_id);
+          await saveGameState(data.roomId, player.user_id, {
+            ...currentGameState,
+            currentQuestion: nextQuestionIndex
+          });
+        }
+
         // แจ้งทุกคนในห้องว่าคำถามจบแล้ว
         io.to(`room_${data.roomId}`).emit('question_ended', { questionIndex: data.questionIndex });
       }
@@ -430,6 +579,146 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+  // บันทึกสถานะเกมจาก client
+  socket.on('save_game_state', async ({ roomId, userId, gameState }) => {
+    try {
+      await saveGameState(roomId, userId, gameState);
+      socket.emit('game_state_saved', { success: true });
+    } catch (error) {
+      console.error('Error saving game state:', error);
+      socket.emit('game_error', { message: 'เกิดข้อผิดพลาดในการบันทึกสถานะเกม' });
+    }
+  });
+
+  // รีเซ็ตเกม
+  socket.on('reset_game', async (roomId, ownerId) => {
+    try {
+      // ตรวจสอบว่าเป็นเจ้าของห้องหรือไม่
+      const room = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        });
+      });
+
+      if (!room || room.creator_id !== ownerId) {
+        socket.emit('game_error', { message: 'ไม่มีสิทธิ์รีเซ็ตเกม' });
+        return;
+      }
+
+      // ลบสถานะเกมของทุกคนในห้อง
+      const players = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [roomId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
+        });
+      });
+
+      for (const player of players) {
+        await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.run('DELETE FROM game_state WHERE room_id = ? AND user_id = ?', 
+              [roomId, player.user_id], (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        });
+      }
+
+      // ลบคำถามเก่าของห้องนี้
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      console.log(`Questions reset for room ${roomId}`);
+      
+      // ลบ game_state ของทุกคนในห้อง
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM game_state WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // รีเซ็ตคะแนนของทุกคนในห้อง
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('UPDATE room_players SET score = 0 WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // ลบประวัติการทำอาหารของห้องนี้
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM cooked_meals WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // ลบวัตถุดิบของทุกคนในห้อง
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM player_ingredients WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // ลบอาหารของทุกคนในห้อง
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      console.log(`Game reset for room ${roomId} by owner ${ownerId}`);
+
+      // แจ้งทุกคนในห้องว่าเกมถูกรีเซ็ต
+      io.to(`room_${roomId}`).emit('game_reset', { 
+        message: 'เกมถูกรีเซ็ตแล้ว พร้อมเริ่มเกมใหม่',
+        resetBy: ownerId
+      });
+
+      // อัปเดตรายชื่อผู้เล่น
+      await updatePlayerList(io, roomId);
+
+    } catch (error) {
+      console.error('Error in reset_game:', error);
+      socket.emit('game_error', { message: 'เกิดข้อผิดพลาดในการรีเซ็ตเกม' });
+    }
+  });
+
+  // รีเซ็ตเกมอัตโนมัติหลังจบเกม
+  socket.on('auto_reset_game', async (roomId) => {
+    try {
+      console.log(`Auto reset requested for room ${roomId}`);
+      await autoResetGame(io, roomId);
+    } catch (error) {
+      console.error('Error in auto_reset_game:', error);
+    }
+  });
+
   // Owner deletes room
   socket.on('delete_room', async (roomId, userId) => {
     try {
@@ -474,9 +763,90 @@ const setupRoomHandlers = (io, socket) => {
   });
 };
 
+// ฟังก์ชันรีเซ็ตเกมอัตโนมัติหลังจบเกม
+const autoResetGame = async (io, roomId) => {
+  try {
+    console.log(`Auto resetting game for room ${roomId}`);
+    
+    // ลบคำถามเก่าของห้องนี้
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    // ลบ game_state ของทุกคนในห้อง
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM game_state WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    // รีเซ็ตคะแนนของทุกคนในห้อง
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('UPDATE room_players SET score = 0 WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    // ลบข้อมูลอาหารที่ทำแล้ว
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM cooked_meals WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    // ลบข้อมูลวัตถุดิบและอาหารของผู้เล่น
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM player_ingredients WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+    
+    console.log(`Auto reset completed for room ${roomId}`);
+    
+    // แจ้งทุกคนในห้องว่าเกมถูกรีเซ็ตอัตโนมัติแล้ว
+    io.to(`room_${roomId}`).emit('game_auto_reset', {
+      message: 'เกมถูกรีเซ็ตอัตโนมัติแล้ว พร้อมเริ่มเกมใหม่'
+    });
+    
+    await updatePlayerList(io, roomId);
+    
+  } catch (error) {
+    console.error('Error in auto reset game:', error);
+  }
+};
+
 module.exports = {
   updatePlayerList,
   addPlayerToRoom,
   removePlayerFromRoom,
-  setupRoomHandlers
+  setupRoomHandlers,
+  saveGameState,
+  getGameState,
+  autoResetGame
 };
