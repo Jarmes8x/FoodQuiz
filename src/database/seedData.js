@@ -19,7 +19,9 @@ const ingredients = [
   { name: 'แครอท', price: 4, image_file: '24.png' }, 
   { name: 'ไก่', price: 5, image_file: '22.png' },
   { name: 'หอมแดง', price: 5, image_file: '28.png' },
-  { name: 'ข้าว', price: 8, image_file: '29.png' }
+  { name: 'ข้าว', price: 8, image_file: '29.png' },
+  { name: 'แตง', price: 4, image_file: '30.png' },
+  { name: 'มะละกอ', price: 9, image_file: '31.png' }
 
 ];
 
