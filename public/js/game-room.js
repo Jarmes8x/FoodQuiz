@@ -337,9 +337,17 @@ function updateMyIngredients(ingredients) {
         });
       }
       
+
+      
       // สร้าง HTML สำหรับแสดงวัตถุดิบเป็นรูปภาพ
       const ingredientsHTML = ingredients.map(ingredient => {
-        const imageFile = ingredientImageMap[ingredient] || `${ingredient}.png`;
+        // หารูปภาพจาก mapping หรือใช้ชื่อวัตถุดิบ + .png
+        let imageFile = ingredientImageMap[ingredient];
+        if (!imageFile) {
+          // ถ้าไม่มีใน mapping ให้ใช้ชื่อวัตถุดิบ + .png
+          imageFile = `${ingredient}.png`;
+        }
+        
         return `
           <div class="inline-flex items-center bg-green-100 rounded-lg px-2 py-1 mr-2 mb-2 shadow-sm border border-green-200">
             <div class="w-10 h-10 bg-white rounded-md mr-2 flex items-center justify-center overflow-hidden border border-green-300">
@@ -347,7 +355,7 @@ function updateMyIngredients(ingredients) {
                    alt="${ingredient}" 
                    class="object-cover w-full h-full" 
                    loading="lazy"
-                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                   onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'; this.onerror=null;">
               <div style="display:none;" class="flex items-center justify-center">
                 <i class="fa-solid fa-carrot text-green-400 text-xs"></i>
               </div>
@@ -559,11 +567,8 @@ function updateMyShopUI() {
   // อัปเดตคะแนนในทุกที่ที่แสดง
   updateMyScore(myPoints);
   
-  // อัปเดตวัตถุดิบ
-  const myIngredientsEl = document.getElementById('my-ingredients');
-  if (myIngredientsEl) {
-    myIngredientsEl.textContent = myIngredients.length > 0 ? myIngredients.join(', ') : 'ยังไม่มี';
-  }
+  // อัปเดตวัตถุดิบ - ใช้ฟังก์ชัน updateMyIngredients แทน textContent
+  updateMyIngredients(myIngredients);
   
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(user.id, myIngredients);
