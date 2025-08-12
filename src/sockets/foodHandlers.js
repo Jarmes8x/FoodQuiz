@@ -134,6 +134,94 @@ const setupFoodHandlers = (io, socket) => {
     }
   });
 
+  // เพิ่ม event handler สำหรับการทำอาหาร
+  socket.on('cook_meal', async ({ roomId, userId, mealName, usedIngredients, remainingIngredients }) => {
+    try {
+      console.log(`User ${userId} cooked ${mealName} using ingredients:`, usedIngredients);
+      
+      // บันทึกประวัติการทำอาหาร
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('INSERT INTO cooked_meals (room_id, user_id, meal_name, used_ingredients) VALUES (?, ?, ?, ?)', 
+            [roomId, userId, mealName, usedIngredients.join(', ')], (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+        });
+      });
+      
+      // อัปเดตวัตถุดิบของผู้เล่นในฐานข้อมูล
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM player_ingredients WHERE room_id = ? AND user_id = ?', 
+            [roomId, userId], (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+        });
+      });
+
+      // เพิ่มวัตถุดิบที่เหลือกลับเข้าไป
+      for (const ingredient of remainingIngredients) {
+        await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.run('INSERT INTO player_ingredients (room_id, user_id, ingredient_name) VALUES (?, ?, ?)', 
+              [roomId, userId, ingredient], (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
+          });
+        });
+      }
+
+      // แจ้งให้ผู้เล่นอื่นทราบว่ามีการทำอาหาร
+      socket.to(roomId).emit('player_cooked_meal', {
+        userId: userId,
+        mealName: mealName,
+        usedIngredients: usedIngredients
+      });
+
+      // ส่งการยืนยันกลับไปยังผู้เล่น
+      socket.emit('meal_cooked_success', {
+        mealName: mealName,
+        usedIngredients: usedIngredients,
+        remainingIngredients: remainingIngredients
+      });
+
+      console.log(`Successfully updated ingredients for user ${userId} after cooking ${mealName}`);
+    } catch (error) {
+      console.error('Error cooking meal:', error);
+      socket.emit('error', { message: 'Error cooking meal' });
+    }
+  });
+
+  // เพิ่ม event handler สำหรับดึงประวัติการทำอาหาร
+  socket.on('get_cooked_meals', async ({ roomId, userId }) => {
+    try {
+      const cookedMeals = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all(`
+            SELECT meal_name, used_ingredients, cooked_at 
+            FROM cooked_meals 
+            WHERE room_id = ? AND user_id = ? 
+            ORDER BY cooked_at DESC
+          `, [roomId, userId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
+        });
+      });
+      
+      socket.emit('cooked_meals_list', {
+        roomId: roomId,
+        userId: userId,
+        cookedMeals: cookedMeals
+      });
+    } catch (error) {
+      console.error('Error getting cooked meals:', error);
+      socket.emit('error', { message: 'Error retrieving cooked meals' });
+    }
+  });
 
 };
 

@@ -197,6 +197,24 @@ usersDB.serialize(() => {
       console.error("Error creating player_ingredients table:", err.message);
     }
   });
+
+  // Table: cooked_meals (ตารางใหม่สำหรับเก็บประวัติการทำอาหาร)
+  usersDB.run(`
+    CREATE TABLE IF NOT EXISTS cooked_meals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      meal_name TEXT NOT NULL,
+      used_ingredients TEXT NOT NULL,
+      cooked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (room_id) REFERENCES rooms(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `, (err) => {
+    if (err) {
+      console.error("Error creating cooked_meals table:", err.message);
+    }
+  });
 });
 
 // ******************** Database close

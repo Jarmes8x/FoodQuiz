@@ -110,6 +110,12 @@
                       data-ingredients="<%= meal.ingredients %>">
                 <i class="fa-solid fa-fire mr-1"></i>ทำอาหาร
               </button>
+              <!-- สถานะการทำอาหาร (จะถูกอัปเดตด้วย JavaScript) -->
+              <div class="cook-status mt-2 text-center hidden">
+                <span class="inline-flex items-center bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full">
+                  <i class="fa-solid fa-check mr-1"></i>ทำเสร็จแล้ว
+                </span>
+              </div>
             </div>
           <% }); %>
         <% } else { %>
@@ -226,6 +232,47 @@
   <% } %>
 </div>
 
+    <!-- ส่วนแสดงประวัติการทำอาหาร -->
+    <div id="cooking-history" class="mt-8">
+      <div class="flex items-center gap-2 mb-4">
+        <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600 shadow">
+          <i class="fa-solid fa-history text-xl"></i>
+        </span>
+        <h4 class="text-xl font-extrabold text-orange-800 tracking-tight drop-shadow">ประวัติการทำอาหาร</h4>
+        <button id="refresh-history-btn" class="ml-auto bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-lg text-sm font-semibold transition-colors duration-200">
+          <i class="fa-solid fa-refresh mr-1"></i>รีเฟรช
+        </button>
+      </div>
+      
+      <!-- สถิติการทำอาหาร -->
+      <div id="cooking-stats" class="mb-4 bg-orange-100 rounded-lg p-4 border border-orange-200">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+          <div class="bg-white rounded-lg p-3 shadow-sm">
+            <div class="text-2xl font-bold text-orange-600" id="total-cooked">0</div>
+            <div class="text-sm text-orange-800">อาหารที่ทำแล้ว</div>
+          </div>
+          <div class="bg-white rounded-lg p-3 shadow-sm">
+            <div class="text-2xl font-bold text-green-600" id="total-available">0</div>
+            <div class="text-sm text-green-800">อาหารที่ได้รับ</div>
+          </div>
+          <div class="bg-white rounded-lg p-3 shadow-sm">
+            <div class="text-2xl font-bold text-blue-600" id="completion-rate">0%</div>
+            <div class="text-sm text-blue-800">อัตราการทำ</div>
+          </div>
+          <div class="bg-white rounded-lg p-3 shadow-sm">
+            <div class="text-2xl font-bold text-purple-600" id="last-cooked">-</div>
+            <div class="text-sm text-purple-800">ทำล่าสุด</div>
+          </div>
+        </div>
+      </div>
+      
+      <div id="cooked-meals-list" class="bg-orange-50 rounded-xl p-4 border border-orange-200 min-h-[100px]">
+        <div class="text-center text-gray-500 italic">
+          <i class="fa-solid fa-utensils text-2xl mb-2"></i>
+          <p>ยังไม่มีประวัติการทำอาหาร</p>
+        </div>
+      </div>
+    </div>
 
 </div>
 <script src="/socket.io/socket.io.js"></script>

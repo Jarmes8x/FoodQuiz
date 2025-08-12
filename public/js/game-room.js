@@ -165,6 +165,32 @@ function cookMeal(mealName, requiredIngredientsStr) {
     return;
   }
   
+  // ลบวัตถุดิบที่ใช้ไปจากรายการ
+  const updatedIngredients = [...playerIngredients];
+  requiredIngredients.forEach(ingredient => {
+    const index = updatedIngredients.indexOf(ingredient);
+    if (index > -1) {
+      updatedIngredients.splice(index, 1);
+    }
+  });
+  
+  // อัปเดตวัตถุดิบในตัวแปร
+  playerIngredients = updatedIngredients;
+  myIngredients = updatedIngredients;
+  
+  // อัปเดต UI
+  updateMyIngredients(updatedIngredients);
+  updatePlayerIngredientsInList(user.id, updatedIngredients);
+  
+  // ส่งข้อมูลไปยัง server เพื่อบันทึกการทำอาหาร
+  socket.emit('cook_meal', {
+    roomId: window.roomId || roomId,
+    userId: user.id,
+    mealName: mealName,
+    usedIngredients: requiredIngredients,
+    remainingIngredients: updatedIngredients
+  });
+  
   // ทำอาหารสำเร็จ
   Swal.fire({
     title: 'ทำอาหารสำเร็จ!',
@@ -246,6 +272,186 @@ socket.on('player_ingredients_loaded', ({ userId, ingredients }) => {
     updatePlayerIngredientsInList(userId, ingredients);
   }
 });
+
+// รับการยืนยันการทำอาหารสำเร็จ
+socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredients }) => {
+  console.log(`ทำอาหารสำเร็จ: ${mealName} ใช้วัตถุดิบ: ${usedIngredients.join(', ')}`);
+  
+  // อัปเดตวัตถุดิบในตัวแปร
+  playerIngredients = remainingIngredients;
+  myIngredients = remainingIngredients;
+  
+  // อัปเดต UI
+  updateMyIngredients(remainingIngredients);
+  updatePlayerIngredientsInList(user.id, remainingIngredients);
+  
+  // โหลดประวัติการทำอาหารใหม่
+  loadCookingHistory();
+  
+  // แสดงข้อความแจ้งเตือน
+  Swal.fire({
+    title: 'ทำอาหารสำเร็จ!',
+    text: `ใช้ ${usedIngredients.join(', ')} ในการทำ ${mealName}`,
+    icon: 'success',
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 3000,
+    timerProgressBar: true,
+    background: '#fff',
+    customClass: {
+      popup: 'rounded-lg shadow-lg'
+    }
+  });
+});
+
+// รับการแจ้งเตือนเมื่อผู้เล่นอื่นทำอาหาร
+socket.on('player_cooked_meal', ({ userId, mealName, usedIngredients }) => {
+  console.log(`ผู้เล่น ${userId} ทำอาหาร: ${mealName}`);
+  
+  // แสดงข้อความแจ้งเตือน (ถ้าต้องการ)
+  // สามารถเพิ่มการแสดง notification ได้ที่นี่
+});
+
+// รับรายการประวัติการทำอาหาร
+socket.on('cooked_meals_list', ({ roomId, userId, cookedMeals }) => {
+  console.log(`ประวัติการทำอาหาร: ${cookedMeals.length} รายการ`);
+  updateCookingHistoryUI(cookedMeals);
+});
+
+// ฟังก์ชันอัปเดต UI ประวัติการทำอาหาร
+function updateCookingHistoryUI(cookedMeals) {
+  const container = document.getElementById('cooked-meals-list');
+  if (!container) return;
+
+  if (cookedMeals && cookedMeals.length > 0) {
+    const mealsHTML = cookedMeals.map(meal => {
+      const cookedDate = new Date(meal.cooked_at).toLocaleString('th-TH', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      return `
+        <div class="bg-white rounded-lg p-4 mb-3 shadow-sm border border-orange-200 hover:shadow-md transition-shadow duration-200">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-orange-100 text-orange-600">
+                <i class="fa-solid fa-utensils text-sm"></i>
+              </span>
+              <span class="font-bold text-orange-800 text-lg">${meal.meal_name}</span>
+            </div>
+            <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
+              ${cookedDate}
+            </span>
+          </div>
+          <div class="text-sm text-gray-600">
+            <span class="font-semibold">ใช้วัตถุดิบ:</span> ${meal.used_ingredients}
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    container.innerHTML = mealsHTML;
+    
+    // อัปเดตสถานะการทำอาหารในส่วนแสดงอาหารที่ได้รับ
+    updateMealCookStatus(cookedMeals);
+  } else {
+    container.innerHTML = `
+      <div class="text-center text-gray-500 italic">
+        <i class="fa-solid fa-utensils text-2xl mb-2"></i>
+        <p>ยังไม่มีประวัติการทำอาหาร</p>
+      </div>
+    `;
+  }
+}
+
+// ฟังก์ชันอัปเดตสถานะการทำอาหารในส่วนแสดงอาหารที่ได้รับ
+function updateMealCookStatus(cookedMeals) {
+  const cookedMealNames = cookedMeals.map(meal => meal.meal_name);
+  
+  // หาปุ่มทำอาหารทั้งหมด
+  document.querySelectorAll('.cook-meal-btn').forEach(btn => {
+    const mealName = btn.dataset.meal;
+    const statusDiv = btn.parentElement.querySelector('.cook-status');
+    
+    if (cookedMealNames.includes(mealName)) {
+      // ถ้าทำเสร็จแล้ว
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>ทำเสร็จแล้ว';
+      btn.classList.remove('bg-green-500', 'hover:bg-green-600');
+      btn.classList.add('bg-gray-400', 'hover:bg-gray-400');
+      
+      if (statusDiv) {
+        statusDiv.classList.remove('hidden');
+      }
+    } else {
+      // ถ้ายังไม่ได้ทำ
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-fire mr-1"></i>ทำอาหาร';
+      btn.classList.add('bg-green-500', 'hover:bg-green-600');
+      btn.classList.remove('bg-gray-400', 'hover:bg-gray-400');
+      
+      if (statusDiv) {
+        statusDiv.classList.add('hidden');
+      }
+    }
+  });
+  
+  // อัปเดตสถิติการทำอาหาร
+  updateCookingStats(cookedMeals);
+}
+
+// ฟังก์ชันอัปเดตสถิติการทำอาหาร
+function updateCookingStats(cookedMeals) {
+  const totalCooked = cookedMeals.length;
+  const totalAvailable = document.querySelectorAll('.cook-meal-btn').length;
+  const completionRate = totalAvailable > 0 ? Math.round((totalCooked / totalAvailable) * 100) : 0;
+  
+  // หาอาหารที่ทำล่าสุด
+  let lastCooked = '-';
+  if (cookedMeals.length > 0) {
+    const latestMeal = cookedMeals[0]; // เรียงตาม cooked_at DESC แล้ว
+    const cookedDate = new Date(latestMeal.cooked_at);
+    const now = new Date();
+    const diffInMinutes = Math.floor((now - cookedDate) / (1000 * 60));
+    
+    if (diffInMinutes < 1) {
+      lastCooked = 'เพิ่งทำ';
+    } else if (diffInMinutes < 60) {
+      lastCooked = `${diffInMinutes} นาที`;
+    } else if (diffInMinutes < 1440) {
+      const hours = Math.floor(diffInMinutes / 60);
+      lastCooked = `${hours} ชั่วโมง`;
+    } else {
+      const days = Math.floor(diffInMinutes / 1440);
+      lastCooked = `${days} วัน`;
+    }
+  }
+  
+  // อัปเดต UI
+  const totalCookedEl = document.getElementById('total-cooked');
+  const totalAvailableEl = document.getElementById('total-available');
+  const completionRateEl = document.getElementById('completion-rate');
+  const lastCookedEl = document.getElementById('last-cooked');
+  
+  if (totalCookedEl) totalCookedEl.textContent = totalCooked;
+  if (totalAvailableEl) totalAvailableEl.textContent = totalAvailable;
+  if (completionRateEl) completionRateEl.textContent = `${completionRate}%`;
+  if (lastCookedEl) lastCookedEl.textContent = lastCooked;
+}
+
+// ฟังก์ชันดึงประวัติการทำอาหาร
+function loadCookingHistory() {
+  socket.emit('get_cooked_meals', {
+    roomId: window.roomId || roomId,
+    userId: user.id
+  });
+}
 
 
 
@@ -690,6 +896,27 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.emit('get_player_ingredients', { 
       roomId: window.roomId || roomId, 
       userId: user.id 
+    });
+  }
+  
+  // โหลดประวัติการทำอาหาร
+  loadCookingHistory();
+  
+  // เพิ่ม event listener สำหรับปุ่มรีเฟรชประวัติ
+  const refreshHistoryBtn = document.getElementById('refresh-history-btn');
+  if (refreshHistoryBtn) {
+    refreshHistoryBtn.addEventListener('click', () => {
+      loadCookingHistory();
+      // แสดง animation ที่ปุ่ม
+      refreshHistoryBtn.innerHTML = '<i class="fa-solid fa-check mr-1"></i>เสร็จแล้ว!';
+      refreshHistoryBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+      refreshHistoryBtn.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+      
+      setTimeout(() => {
+        refreshHistoryBtn.innerHTML = '<i class="fa-solid fa-refresh mr-1"></i>รีเฟรช';
+        refreshHistoryBtn.classList.add('bg-orange-500', 'hover:bg-orange-600');
+        refreshHistoryBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+      }, 1000);
     });
   }
   
