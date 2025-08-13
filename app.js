@@ -27,6 +27,7 @@ app.set('io', io);
 const { setupSocketHandlers } = require('./src/sockets');
 setupSocketHandlers(io);
 
+
 // Middleware
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'src/views'));

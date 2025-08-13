@@ -98,6 +98,48 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const playerCountElements = document.querySelectorAll('.player-count');
+    const fetchControllers = {};
+
+    playerCountElements.forEach(el => {
+      const roomId = el.dataset.roomId;
+      let lastCount = null; // จำค่าล่าสุดเพื่อเช็คว่ามีการเปลี่ยนหรือไม่
+
+      const updatePlayerCount = () => {
+        // ยกเลิก request เดิมถ้ายังไม่เสร็จ
+        if (fetchControllers[roomId]) {
+          fetchControllers[roomId].abort();
+        }
+
+        const controller = new AbortController();
+        fetchControllers[roomId] = controller;
+
+        fetch(`/api/room-players/${roomId}`, { signal: controller.signal })
+          .then(res => res.json())
+          .then(players => {
+            if (players.length !== lastCount) {
+              el.textContent = players.length;
+              lastCount = players.length;
+            }
+          })
+          .catch(err => { 
+            if (err.name !== 'AbortError') {
+              console.error(`Error fetching players for room ${roomId}:`, err);
+            }
+          });
+      };
+
+      // โหลดตอนเริ่ม
+      updatePlayerCount();
+
+      // อัปเดตทุก 5 วินาที
+      setInterval(updatePlayerCount, 5000);
+    });
+  });
+</script>
+
+<script>
   // สมมติว่ามีการเชื่อมต่อ socket.io แล้ว
 const socket = io();
 

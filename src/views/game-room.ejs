@@ -68,7 +68,9 @@
         <div id="waiting-area" class="text-center text-lg text-gray-500">
           <span id="waiting-message">รอเจ้าของห้องเริ่มเกม...</span>
         </div>
-      </div>
+        <div>
+          <button id="leave-room-btn" class="mt-4 bg-gradient-to-r bg-red-500 hover:bg-red-600 text-white font-bold px-4 py-2 rounded-lg shadow-md mx-auto block">ออกจากห้อง</button>        </div>
+        </div>
       <% if (user.id === room.creator_id) { %>
         <button id="start-btn" class="mt-4 bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full">เริ่มเกม</button>
         <button id="next-btn" class="mt-4 bg-gradient-to-r from-[#ff8c42] to-[#ff6a6a] text-white font-bold px-8 py-3 rounded-2xl text-lg w-full hidden">ข้อถัดไป</button>

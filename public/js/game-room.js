@@ -2334,3 +2334,37 @@ document.addEventListener('DOMContentLoaded', function () {
   }, 30000);
 });
 
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const leaveRoomBtn = document.getElementById('leave-room-btn');
+  
+  if (leaveRoomBtn) {
+    leaveRoomBtn.addEventListener('click', () => {
+      Swal.fire({
+        title: 'ยืนยันการออกจากห้อง?',
+        text: 'คุณต้องการออกจากห้องนี้และกลับไปยังหน้าหลักหรือไม่?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ออกจากห้อง',
+        cancelButtonText: 'ยกเลิก',
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#6b7280'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          // แจ้ง server ว่าออกจากห้อง
+          socket.emit('leave_room', {
+            roomId: window.roomId || roomId,
+            userId: user.id
+          });
+          
+          // ตัดการเชื่อมต่อ socket หรือไม่ก็ได้ ขึ้นกับ logic ของคุณ
+          // socket.disconnect();
+
+          // เปลี่ยนหน้าไปยังหน้าหลัก (ปรับ URL ตามที่ต้องการ)
+          window.location.href = '/dashboard'; // หรือ URL ที่ต้องการ
+        }
+      });
+    });
+  }
+});
