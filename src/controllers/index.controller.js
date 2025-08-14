@@ -28,7 +28,7 @@ exports.dashboard = async (req, res) => {
       return res.redirect('/');
     }
 
-    // ดึงข้อมูลห้องทั้งหมด
+    // ดึงข้อมูลห้องทั้งหมด (รวมห้องที่จบแล้วด้วย)
     const rooms = await executeWithRetry(() => {
       return new Promise((resolve, reject) => {
         usersDB.all(
@@ -103,7 +103,7 @@ exports.quiz = async (req, res) => {
       return res.redirect('/login');
     }
 
-    // ดึงข้อมูล rooms ทั้งหมด
+    // ดึงข้อมูล rooms ทั้งหมด (รวมห้องที่จบแล้วด้วย)
     const rooms = await new Promise((resolve, reject) => {
       usersDB.all(
         `SELECT rooms.*, users.name as owner_name
@@ -323,6 +323,9 @@ exports.gameRoomPage = async (req, res) => {
       });
     }
 
+    // ตรวจสอบว่าห้องจบแล้วหรือไม่ - ให้เข้าร่วมได้แต่จะแสดงผู้ชนะ
+    const isGameFinished = room.status === 'finished';
+
     // 2) ดึงข้อมูลประกอบทั้งหมดแบบขนาน
     const [
       players,
@@ -427,7 +430,8 @@ exports.gameRoomPage = async (req, res) => {
       mealIngredients,
       playerFoods: playerFoodsMap,
       playerIngredients: playerIngredientsMap,
-      gameState
+      gameState,
+      isGameFinished
     });
 
   } catch (err) {

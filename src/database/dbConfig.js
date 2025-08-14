@@ -55,12 +55,22 @@ usersDB.serialize(() => {
       is_private BOOLEAN DEFAULT 0,
       password TEXT DEFAULT NULL,
       room_color TEXT DEFAULT '#FFFFFF',
+      status TEXT DEFAULT 'active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (creator_id) REFERENCES users(id)
     )
   `, (err) => {
     if (err) {
       console.error("Error creating rooms table:", err.message);
+    }
+  });
+  
+  // เพิ่มคอลัมน์ status ถ้ายังไม่มี (สำหรับฐานข้อมูลเก่า)
+  usersDB.run(`
+    ALTER TABLE rooms ADD COLUMN status TEXT DEFAULT 'active'
+  `, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error("Error adding status column to rooms table:", err.message);
     }
   });
 

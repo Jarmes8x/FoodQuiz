@@ -177,36 +177,51 @@ const setupRoomHandlers = (io, socket) => {
       console.log(`Game state for user ${user.id} in room ${roomId}:`, gameState);
       socket.emit('game_state_loaded', { gameState });
 
-      // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
-      if (gameState && gameState.gameStarted) {
-        // ตรวจสอบว่าเกมจบจริงหรือไม่
-        const isGameReallyFinished = gameState.currentQuestion >= 14; // 14 คำถาม
-        if (!isGameReallyFinished) {
-          console.log(`Game is ongoing, current question: ${gameState.currentQuestion}/14`);
-          try {
-            const questions = await executeWithRetry(async () => {
-              return new Promise((resolve, reject) => {
-                usersDB.all(`
-                  SELECT q.* FROM questions q 
-                  JOIN room_questions rq ON q.id = rq.question_id 
-                  WHERE rq.room_id = ?
-                  ORDER BY rq.id ASC
-                `, [roomId], (err, rows) => {
-                  if (err) reject(err);
-                  else resolve(rows || []);
+      // ตรวจสอบสถานะห้องก่อนส่งคำถาม
+      const roomStatus = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT status FROM rooms WHERE id = ?', [roomId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        });
+      });
+      
+      // ถ้าห้องจบแล้ว ไม่ส่งคำถาม
+      if (roomStatus && roomStatus.status === 'finished') {
+        console.log(`Room ${roomId} is finished - not sending questions`);
+      } else {
+        // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
+        if (gameState && gameState.gameStarted) {
+          // ตรวจสอบว่าเกมจบจริงหรือไม่
+          const isGameReallyFinished = gameState.currentQuestion >= 14; // 14 คำถาม
+          if (!isGameReallyFinished) {
+            console.log(`Game is ongoing, current question: ${gameState.currentQuestion}/14`);
+            try {
+              const questions = await executeWithRetry(async () => {
+                return new Promise((resolve, reject) => {
+                  usersDB.all(`
+                    SELECT q.* FROM questions q 
+                    JOIN room_questions rq ON q.id = rq.question_id 
+                    WHERE rq.room_id = ?
+                    ORDER BY rq.id ASC
+                  `, [roomId], (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows || []);
+                  });
                 });
               });
-            });
-            
-            if (questions.length > 0) {
-              console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
-              socket.emit('game_questions', questions);
+              
+              if (questions.length > 0) {
+                console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
+                socket.emit('game_questions', questions);
+              }
+            } catch (error) {
+              console.error('Error loading questions for ongoing game:', error);
             }
-          } catch (error) {
-            console.error('Error loading questions for ongoing game:', error);
+          } else {
+            console.log(`Game is finished, current question: ${gameState.currentQuestion}/14`);
           }
-        } else {
-          console.log(`Game is finished, current question: ${gameState.currentQuestion}/14`);
         }
       }
 
@@ -762,6 +777,22 @@ const setupRoomHandlers = (io, socket) => {
       await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
           usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('DELETE FROM game_state WHERE room_id = ?', [roomId], (err) => {
             if (err) reject(err);
             else resolve();
           });

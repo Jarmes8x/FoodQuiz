@@ -7,6 +7,9 @@ let startTime = null;
 let currentPlayerScore = window.initialPlayerScore || 0;
 let playerIngredients = window.initialPlayerIngredients || [];
 
+// ตรวจสอบว่าเกมจบแล้วหรือไม่
+const isGameFinished = window.isGameFinished || false;
+
 // สำหรับวัตถุดิบและอาหาร
 let myPoints = window.initialPlayerScore || 0;
 let myIngredients = window.initialPlayerIngredients || [];
@@ -283,7 +286,7 @@ socket.on('player_ingredients_loaded', ({ userId, ingredients }) => {
 });
 
 // รับการยืนยันการทำอาหารสำเร็จ
-socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredients }) => {
+socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredients, hasCompletedAllMeals }) => {
   console.log(`ทำอาหารสำเร็จ: ${mealName} ใช้วัตถุดิบ: ${usedIngredients.join(', ')}`);
 
   // อัปเดตวัตถุดิบในตัวแปร
@@ -298,23 +301,46 @@ socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredie
   loadCookingHistory();
 
   // แสดง modal ทำอาหารสำเร็จ
-  Swal.fire({
-    title: '<div class="flex items-center gap-3"><i class="fa-solid fa-utensils text-green-600 text-3xl"></i><span class="text-2xl font-bold text-green-800">ทำอาหารสำเร็จ!</span></div>',
-    html: `
+  let modalTitle = '<div class="flex items-center gap-3"><i class="fa-solid fa-utensils text-green-600 text-3xl"></i><span class="text-2xl font-bold text-green-800">ทำอาหารสำเร็จ!</span></div>';
+  let modalHtml = `
+    <div class="text-center">
+      <div class="mb-4">
+        <div class="text-4xl mb-2">🍽️</div>
+        <div class="text-xl font-semibold text-gray-800 mb-2">${mealName}</div>
+        <div class="text-sm text-gray-600">ใช้วัตถุดิบ: ${usedIngredients.join(', ')}</div>
+      </div>
+      <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+        <div class="text-green-700 font-medium">🎉 ยินดีด้วย! คุณทำอาหารสำเร็จแล้ว</div>
+      </div>
+    </div>
+  `;
+
+  // ถ้าทำอาหารครบแล้ว ให้แสดงข้อความพิเศษ
+  if (hasCompletedAllMeals) {
+    modalTitle = '<div class="flex items-center gap-3"><i class="fa-solid fa-crown text-green-600 text-3xl"></i><span class="text-2xl font-bold text-green-700">🏆 ทำอาหารครบแล้ว!</span></div>';
+    modalHtml = `
       <div class="text-center">
         <div class="mb-4">
-          <div class="text-4xl mb-2">🍽️</div>
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full shadow-lg mb-3">
+            <i class="fa-solid fa-trophy text-2xl text-green-600"></i>
+          </div>
           <div class="text-xl font-semibold text-gray-800 mb-2">${mealName}</div>
           <div class="text-sm text-gray-600">ใช้วัตถุดิบ: ${usedIngredients.join(', ')}</div>
         </div>
-        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
-          <div class="text-green-700 font-medium">🎉 ยินดีด้วย! คุณทำอาหารสำเร็จแล้ว</div>
+        <div class="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl p-4 shadow-lg">
+          <div class="text-white font-bold text-lg">🎉 ยินดีด้วย! คุณทำอาหารครบทุกอย่างแล้ว!</div>
+          <div class="text-green-100 text-sm mt-2">เกมจะจบในไม่ช้า...</div>
         </div>
       </div>
-    `,
-    icon: 'success',
-    confirmButtonText: 'เยี่ยม!',
-    confirmButtonColor: '#10b981',
+    `;
+  }
+
+  Swal.fire({
+    title: modalTitle,
+    html: modalHtml,
+    icon: hasCompletedAllMeals ? 'success' : 'success',
+    confirmButtonText: hasCompletedAllMeals ? 'เยี่ยมมาก!' : 'เยี่ยม!',
+    confirmButtonColor: hasCompletedAllMeals ? '#10b981' : '#10b981',
     showCancelButton: false,
     allowOutsideClick: false,
     customClass: {
@@ -326,11 +352,318 @@ socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredie
 });
 
 // รับการแจ้งเตือนเมื่อผู้เล่นอื่นทำอาหาร
-socket.on('player_cooked_meal', ({ userId, mealName, usedIngredients }) => {
+socket.on('player_cooked_meal', ({ userId, mealName, usedIngredients, hasCompletedAllMeals }) => {
   console.log(`ผู้เล่น ${userId} ทำอาหาร: ${mealName}`);
+
+  // ถ้าผู้เล่นทำอาหารครบแล้ว
+  if (hasCompletedAllMeals) {
+    showNotification(`🏆 ผู้เล่นคนหนึ่งทำอาหารครบแล้ว! เกมจะจบในไม่ช้า...`, 'success');
+  }
 
   // แสดงข้อความแจ้งเตือน (ถ้าต้องการ)
   // สามารถเพิ่มการแสดง notification ได้ที่นี่
+});
+
+// ฟังก์ชันอัปเดตการแสดงผู้ชนะในหน้าเว็บ
+function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
+  console.log(`อัปเดตการแสดงผู้ชนะ: ${winnerName} ในห้อง ${roomName}`);
+  console.log(`เมนูที่ผู้ชนะได้รับ:`, winnerFoods);
+  
+  // อัปเดตข้อความผู้ชนะในหน้า (ลองหลาย selector)
+  const winnerElements = [
+    document.querySelector('.text-yellow-600'),
+    document.querySelector('.text-yellow-200'),
+    document.querySelector('[data-winner-name]'),
+    document.querySelector('.text-yellow-600.font-extrabold')
+  ];
+  
+  winnerElements.forEach(element => {
+    if (element) { 
+      console.log(`อัปเดตผู้ชนะใน element: ${winnerName}`);
+    }
+  });
+  
+  // ถ้ายังไม่เจอ ให้อัปเดตทุก element ที่มีข้อความ "รอข้อมูล..."
+  const allElements = document.querySelectorAll('*');
+  allElements.forEach(element => {
+    if (element.textContent === 'รอข้อมูล...') {
+      element.textContent = winnerName;
+      console.log(`อัปเดตผู้ชนะ (fallback): ${winnerName}`);
+    }
+  });
+  
+  // อัปเดตสถานะห้องในหน้า
+  const gameOverBanner = document.querySelector('.bg-gradient-to-br.from-green-400');
+  if (gameOverBanner) {
+    gameOverBanner.style.display = 'block';
+  }
+  
+  // แสดงเมนูใน Game Over banner
+  const winnerFoodsDisplay = document.getElementById('winner-foods-display');
+  const winnerFoodsList = document.getElementById('winner-foods-list');
+  
+  if (winnerFoodsDisplay && winnerFoodsList && winnerFoods && winnerFoods.length > 0) {
+    // สร้าง HTML สำหรับเมนู
+    const foodsHTML = winnerFoods.map(food => `
+      <span class="inline-flex items-center bg-yellow-100 text-yellow-800 rounded-full px-3 py-1 text-sm font-semibold">
+        <i class="fa-solid fa-check text-yellow-600 mr-1"></i>
+        ${food}
+      </span>
+    `).join('');
+    
+    winnerFoodsList.innerHTML = foodsHTML;
+    winnerFoodsDisplay.style.display = 'block';
+    console.log(`แสดงเมนูใน Game Over banner: ${winnerFoods.join(', ')}`);
+  }
+  
+  // ซ่อนปุ่มเกม
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const resetBtn = document.getElementById('reset-game-btn');
+  
+  if (startBtn) startBtn.classList.add('hidden');
+  if (nextBtn) nextBtn.classList.add('hidden');
+  if (resetBtn) resetBtn.classList.add('hidden');
+  
+  // ซ่อนคำถามและตัวเลือก
+  const questionContainer = document.getElementById('question-container');
+  const choicesContainer = document.getElementById('choices-container');
+  const questionText = document.getElementById('question-text');
+  const hintText = document.getElementById('hint-text');
+  
+  if (questionContainer) questionContainer.style.display = 'none';
+  if (choicesContainer) choicesContainer.style.display = 'none';
+  if (questionText) questionText.style.display = 'none';
+  if (hintText) hintText.style.display = 'none';
+  
+  // อัปเดตข้อความใน waiting area
+  const waitingArea = document.getElementById('waiting-area');
+  if (waitingArea) {
+    // สร้าง HTML สำหรับแสดงเมนู
+    let foodsHTML = '';
+    if (winnerFoods && winnerFoods.length > 0) {
+      foodsHTML = `
+        <div class="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <h4 class="text-sm font-bold text-yellow-800 mb-2">
+            <i class="fa-solid fa-utensils mr-1"></i>เมนูที่ได้รับ:
+          </h4>
+          <div class="flex flex-wrap gap-2 justify-center">
+            ${winnerFoods.map(food => `
+              <span class="inline-flex items-center bg-yellow-100 text-yellow-800 rounded-full px-3 py-1 text-sm font-semibold">
+                <i class="fa-solid fa-check text-yellow-600 mr-1"></i>
+                ${food}
+              </span>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    waitingArea.innerHTML = `
+      <div class="text-center">
+        <div class="mb-4">
+          <i class="fa-solid fa-crown text-4xl text-yellow-500 mb-2"></i>
+        </div>
+        <h3 class="text-xl font-bold text-green-600 mb-2">🏆 ผู้ชนะ</h3>
+        <p class="text-lg font-semibold text-gray-800 mb-2">${winnerName}</p>
+        <p class="text-sm text-gray-600">ห้อง: ${roomName}</p>
+        ${foodsHTML}
+        <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p class="text-sm text-green-700 font-medium">
+            <i class="fa-solid fa-info-circle mr-1"></i>
+            ห้องนี้จบเกมแล้ว - ไม่สามารถเล่นต่อได้
+          </p>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// รับการแจ้งเตือนเมื่อเกมจบแล้ว
+socket.on('game_ended', ({ winner, roomId, roomName }) => {
+  console.log(`เกมจบแล้ว! ผู้ชนะ: ${winner.name}`);
+  
+  // อัปเดตสถานะเกม
+  currentQuestion = 0;
+  answeredQuestions = [];
+  gameStarted = false;
+  gameFinished = true;
+  isGameFinished = true;
+  
+  // อัปเดต UI ทันที - แสดงผู้ชนะในหน้าเว็บ
+  updateWinnerDisplay(winner.name, roomName, winner.foods);
+  
+  // หยุดการเรียกข้อมูลซ้ำ
+  if (window.checkWinnerInterval) {
+    clearInterval(window.checkWinnerInterval);
+  }
+  
+  // สร้าง HTML สำหรับแสดงเมนูใน Modal
+  let foodsModalHTML = '';
+  if (winner.foods && winner.foods.length > 0) {
+    foodsModalHTML = `
+      <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+        <h4 class="text-sm font-bold text-yellow-800 mb-2">
+          <i class="fa-solid fa-utensils mr-1"></i>เมนูที่ได้รับ:
+        </h4>
+        </div>
+        <div class="flex flex-wrap gap-2 justify-center">
+          ${winner.foods.map(food => `
+            <span class="inline-flex items-center bg-yellow-100 text-yellow-800 rounded-full px-3 py-1 text-sm font-semibold">
+              <i class="fa-solid fa-check text-yellow-600 mr-1"></i>
+              ${food}
+            </span>
+          `).join('')}
+        </div>
+    `;
+  }
+  
+  // แสดง modal ผู้ชนะ (ไม่บังคับออกจากห้อง)
+  Swal.fire({
+    title: '<div class="flex items-center justify-center gap-3"><i class="fa-solid fa-crown text-green-600 text-3xl"></i><span class="text-3xl font-black text-green-700">🎊 เกมจบแล้ว! 🎊</span></div>',
+    html: `
+      <div class="text-center">
+        <div class="mb-6">
+          <div class="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full shadow-lg mb-4">
+            <i class="fa-solid fa-trophy text-3xl text-green-600"></i>
+          </div>
+        </div>
+        <h3 class="text-2xl font-bold text-green-700 mb-3">🏆 ผู้ชนะ</h3>
+        <div class="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl p-4 mb-4 shadow-lg">
+          <p class="text-xl font-bold">${winner.name}</p>
+        </div>
+        ${foodsModalHTML}
+        <p class="text-gray-700 mb-4 font-medium">ทำอาหารครบทุกอย่างแล้ว!</p>
+        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+          <p class="text-sm text-green-700 font-semibold">
+            <i class="fa-solid fa-home mr-2"></i>ห้อง: ${roomName}
+          </p>
+        </div>
+        <div class="mt-4 text-xs text-gray-500">
+          <i class="fa-solid fa-info-circle mr-1"></i>
+          ห้องนี้จบเกมแล้ว - คำถามถูกรีเซ็ตแล้ว
+        </div>
+      </div>
+    `,
+    icon: 'success',
+    confirmButtonText: 'ตกลง',
+    confirmButtonColor: '#10b981',
+    allowOutsideClick: true,
+    allowEscapeKey: true,
+    showCancelButton: false,
+    customClass: {
+      popup: 'rounded-2xl shadow-2xl border-4 border-green-200',
+      title: 'text-lg sm:text-xl font-bold',
+      confirmButton: 'px-6 py-3 text-lg font-semibold rounded-xl'
+    }
+  });
+  
+  // ปิดปุ่มต่างๆ ในเกม
+  disableGameControls();
+});
+
+// รับข้อมูลผู้ชนะสำหรับห้องที่จบแล้ว
+socket.on('game_winner_info', ({ winner, roomName }) => {
+  console.log(`ข้อมูลผู้ชนะ: ${winner.name}`);
+  
+  // อัปเดตการแสดงผู้ชนะในหน้าเว็บ
+  updateWinnerDisplay(winner.name, roomName, winner.foods);
+  
+  // หยุดการเรียกข้อมูลซ้ำ
+  if (window.checkWinnerInterval) {
+    clearInterval(window.checkWinnerInterval);
+  }
+});
+
+// รับการแจ้งเตือนรีเซ็ตเกม
+socket.on('game_reset', ({ message }) => {
+  console.log('เกมถูกรีเซ็ต:', message);
+  
+  // รีเซ็ตตัวแปรเกม
+  currentQuestion = 0;
+  answeredQuestions = [];
+  gameStarted = false;
+  gameFinished = true;
+  
+  // ซ่อนปุ่มเกม
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const resetBtn = document.getElementById('reset-game-btn');
+  
+  if (startBtn) startBtn.classList.add('hidden');
+  if (nextBtn) nextBtn.classList.add('hidden');
+  if (resetBtn) resetBtn.classList.add('hidden');
+  
+  // ซ่อนคำถามและตัวเลือก
+  const questionContainer = document.getElementById('question-container');
+  const choicesContainer = document.getElementById('choices-container');
+  const questionText = document.getElementById('question-text');
+  const hintText = document.getElementById('hint-text');
+  
+  if (questionContainer) questionContainer.style.display = 'none';
+  if (choicesContainer) choicesContainer.style.display = 'none';
+  if (questionText) questionText.style.display = 'none';
+  if (hintText) hintText.style.display = 'none';
+  
+  // แสดงข้อความแจ้งเตือน
+  Swal.fire({
+    title: '🎉 เกมจบแล้ว!',
+    text: 'คำถามถูกรีเซ็ตแล้ว - ห้องนี้ไม่สามารถเล่นต่อได้',
+    icon: 'success',
+    confirmButtonText: 'ตกลง',
+    confirmButtonColor: '#10b981',
+    allowOutsideClick: true,
+    allowEscapeKey: true
+  });
+});
+
+// รับการแจ้งเตือนห้องจบแล้ว
+socket.on('room_finished', ({ roomId, message }) => {
+  console.log(`ห้อง ${roomId} จบแล้ว:`, message);
+  
+  // อัปเดตสถานะห้อง
+  isGameFinished = true;
+  gameFinished = true;
+  gameStarted = false;
+  
+  // อัปเดต UI ทันที
+  const waitingArea = document.getElementById('waiting-area');
+  if (waitingArea) {
+    waitingArea.innerHTML = `
+      <div class="text-center">
+        <div class="mb-4">
+          <i class="fa-solid fa-crown text-4xl text-yellow-500 mb-2"></i>
+        </div>
+        <h3 class="text-xl font-bold text-green-600 mb-2">🏆 เกมจบแล้ว!</h3>
+        <p class="text-lg font-semibold text-gray-800 mb-2">รอข้อมูลผู้ชนะ...</p>
+        <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <p class="text-sm text-green-700 font-medium">
+            <i class="fa-solid fa-info-circle mr-1"></i>
+            ห้องนี้จบเกมแล้ว - ไม่สามารถเล่นต่อได้
+          </p>
+        </div>
+      </div>
+    `;
+  }
+  
+  // ปิดการควบคุมเกม
+  disableGameControls();
+  
+  // ซ่อนคำถามและตัวเลือก
+  const questionContainer = document.getElementById('question-container');
+  const choicesContainer = document.getElementById('choices-container');
+  const questionText = document.getElementById('question-text');
+  const hintText = document.getElementById('hint-text');
+  
+  if (questionContainer) questionContainer.style.display = 'none';
+  if (choicesContainer) choicesContainer.style.display = 'none';
+  if (questionText) questionText.style.display = 'none';
+  if (hintText) hintText.style.display = 'none';
+  
+  // หยุดการเรียกข้อมูลซ้ำ
+  if (window.checkWinnerInterval) {
+    clearInterval(window.checkWinnerInterval);
+  }
 });
 
 // รับอาหารที่สุ่มได้เมื่อเข้าห้อง
@@ -1312,6 +1645,47 @@ function showFoodModal(food) {
 // Event Listeners รวม
 // ===============================
 document.addEventListener('DOMContentLoaded', () => {
+  // ตรวจสอบว่าเกมจบแล้วหรือไม่
+  if (isGameFinished) {
+    console.log('เกมจบแล้ว - ปิดการควบคุมเกม');
+    disableGameControls();
+    
+    // ซ่อนคำถามและตัวเลือกทันที
+    const questionContainer = document.getElementById('question-container');
+    const choicesContainer = document.getElementById('choices-container');
+    const questionText = document.getElementById('question-text');
+    const hintText = document.getElementById('hint-text');
+    
+    if (questionContainer) questionContainer.style.display = 'none';
+    if (choicesContainer) choicesContainer.style.display = 'none';
+    if (questionText) questionText.style.display = 'none';
+    if (hintText) hintText.style.display = 'none';
+    
+    // ดึงข้อมูลผู้ชนะจาก server
+    socket.emit('get_game_winner', { roomId: window.roomId || roomId });
+    
+    // เพิ่มการตรวจสอบข้อมูลผู้ชนะทุก 2 วินาที
+    const checkWinnerInterval = setInterval(() => {
+      // ตรวจสอบว่าห้องจบแล้วหรือไม่
+      if (isGameFinished) {
+        console.log('ห้องจบแล้ว - หยุดการเรียกข้อมูลผู้ชนะ');
+        clearInterval(checkWinnerInterval);
+        return;
+      }
+      
+      const winnerElement = document.querySelector('.text-yellow-600');
+      if (winnerElement && winnerElement.textContent === 'รอข้อมูล...') {
+        console.log('ยังไม่ได้ข้อมูลผู้ชนะ - เรียกใหม่');
+        socket.emit('get_game_winner', { roomId: window.roomId || roomId });
+      } else {
+        clearInterval(checkWinnerInterval);
+      }
+    }, 2000);
+    
+    // เก็บ interval ไว้ใน window object เพื่อหยุดภายหลัง
+    window.checkWinnerInterval = checkWinnerInterval;
+  }
+
   // จัดการปุ่มลบห้อง (เฉพาะเจ้าของห้อง)
   const deleteRoomBtn = document.getElementById('delete-room-btn');
   if (deleteRoomBtn && isOwner) {
@@ -2280,7 +2654,7 @@ function showQuestion() {
     }
 
     // ส่งคำตอบว่าไม่ได้ตอบ (answerIndex = -1)
-    if (!answered) {
+    if (!answered && !isGameFinished) {
       answered = true;
       socket.emit('submit_answer', {
         roomId,
@@ -2317,6 +2691,12 @@ function showQuestion() {
       // ป้องกันการเรียกซ้ำ
       if (answered || selectedAnswerIdx !== null || questionEnded) {
         console.log('Answer already submitted or question ended, ignoring click');
+        return;
+      }
+      
+      // ตรวจสอบว่าเกมจบแล้วหรือไม่
+      if (isGameFinished) {
+        console.log('เกมจบแล้ว - ไม่สามารถส่งคำตอบได้');
         return;
       }
 
@@ -2909,3 +3289,84 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ฟังก์ชันปิดการควบคุมเกมเมื่อเกมจบแล้ว
+function disableGameControls() {
+  // รีเซ็ตตัวแปรเกม
+  currentQuestion = 0;
+  answeredQuestions = [];
+  gameStarted = false;
+  gameFinished = true;
+  
+  // ซ่อนคำถามและตัวเลือก
+  const questionContainer = document.getElementById('question-container');
+  const choicesContainer = document.getElementById('choices-container');
+  const questionText = document.getElementById('question-text');
+  const hintText = document.getElementById('hint-text');
+  
+  if (questionContainer) questionContainer.style.display = 'none';
+  if (choicesContainer) choicesContainer.style.display = 'none';
+  if (questionText) questionText.style.display = 'none';
+  if (hintText) hintText.style.display = 'none';
+  
+  // ปิดปุ่มทำอาหาร
+  document.querySelectorAll('.cook-meal-btn').forEach(btn => {
+    btn.disabled = true;
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
+    btn.classList.remove('hover:bg-green-600');
+  });
+  
+  // ปิดปุ่มซื้อวัตถุดิบ
+  document.querySelectorAll('.ingredient-btn').forEach(btn => {
+    btn.disabled = true;
+    btn.classList.add('opacity-50', 'cursor-not-allowed');
+    btn.classList.remove('hover:bg-yellow-200');
+  });
+  
+  // ปิดปุ่มเริ่มเกม (ถ้าเป็นเจ้าของห้อง)
+  const startBtn = document.getElementById('start-btn');
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+  }
+  
+  // ปิดปุ่มข้อถัดไป (ถ้าเป็นเจ้าของห้อง)
+  const nextBtn = document.getElementById('next-btn');
+  if (nextBtn) {
+    nextBtn.disabled = true;
+    nextBtn.classList.add('opacity-50', 'cursor-not-allowed');
+  }
+  
+  // ปิดปุ่มรีเซ็ตเกม (ถ้าเป็นเจ้าของห้อง)
+  const resetBtn = document.getElementById('reset-game-btn');
+  if (resetBtn) {
+    resetBtn.disabled = true;
+    resetBtn.classList.add('opacity-50', 'cursor-not-allowed');
+  }
+  
+      // แสดงข้อความว่าเกมจบแล้ว (เฉพาะในส่วน game-area เมื่อไม่ได้โหลดหน้าใหม่)
+    const gameArea = document.getElementById('game-area');
+    if (gameArea && !isGameFinished) {
+      // เปลี่ยนเฉพาะข้อความในส่วน waiting-area
+      const waitingArea = document.getElementById('waiting-area');
+      if (waitingArea) {
+        waitingArea.innerHTML = `
+          <div class="text-center">
+            <div class="bg-gradient-to-br from-green-400 to-green-600 rounded-2xl p-6 shadow-lg border-2 border-green-300">
+              <div class="mb-4">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full shadow-lg mb-3">
+                <i class="fa-solid fa-crown text-2xl text-green-600"></i>
+                </div>
+              </div>
+              <h3 class="text-2xl font-bold text-white mb-2">🎊 เกมจบแล้ว! 🎊</h3>
+              <p class="text-green-100 font-medium">มีผู้เล่นทำอาหารครบทุกอย่างแล้ว</p>
+              <div class="mt-4 text-green-200 text-sm">
+                <i class="fa-solid fa-info-circle mr-1"></i>
+                ไม่สามารถเล่นเกมต่อได้ - คำถามถูกรีเซ็ตแล้ว
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+}
