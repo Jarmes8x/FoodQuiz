@@ -15,7 +15,7 @@ exports.home = (req, res) => {
   }
 };
 
-exports.dashboard = (req, res) => {
+exports.dashboard = async (req, res) => {
   try {
     const locals = {
       title: "FoodQuiz",
@@ -23,44 +23,64 @@ exports.dashboard = (req, res) => {
       header: "Page header",
       layout: 'layouts/main'
     };
+
     if (!req.user) {
       return res.redirect('/');
     }
-    // ดึงข้อมูลห้องทั้งหมดเพื่อให้ quiz.ejs ใช้งานได้
-    executeWithRetry(async () => {
+
+    // ดึงข้อมูลห้องทั้งหมด
+    const rooms = await executeWithRetry(() => {
       return new Promise((resolve, reject) => {
-        usersDB.all('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id ORDER BY rooms.created_at DESC', [], (errRooms, rooms) => {
-          if (errRooms) reject(errRooms);
-          else {
-            executeWithRetry(async () => {
-              return new Promise((resolve2, reject2) => {
-                usersDB.all('SELECT name, created_at FROM users ORDER BY created_at DESC', [], (err, users) => {
-                  if (err) {
-                    console.error('Dashboard DB error:', err);
-                    users = [];
-                  }
-                  locals.user = req.user;
-                  locals.users = users;
-                  locals.rooms = rooms || [];
-                  locals.error = null;
-                  res.render('dashboard', locals);
-                  resolve2();
-                });
-              });
-            });
-            resolve();
+        usersDB.all(
+          `SELECT rooms.*, users.name as owner_name
+           FROM rooms
+           JOIN users ON rooms.creator_id = users.id
+           ORDER BY rooms.created_at DESC`,
+          [],
+          (errRooms, rows) => {
+            if (errRooms) reject(errRooms);
+            else resolve(rows);
           }
-        });
+        );
       });
-    }).catch(err => {
-      console.error('Dashboard error:', err);
-      res.status(500).render('dashboard', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
     });
+
+    // ดึงข้อมูลผู้ใช้ทั้งหมด
+    const users = await executeWithRetry(() => {
+      return new Promise((resolve, reject) => {
+        usersDB.all(
+          `SELECT name, created_at
+           FROM users
+           ORDER BY created_at DESC`,
+          [],
+          (err, rows) => {
+            if (err) {
+              console.error('Dashboard DB error:', err);
+              resolve([]); // ส่ง array ว่างถ้า error
+            } else {
+              resolve(rows);
+            }
+          }
+        );
+      });
+    });
+
+    locals.user = req.user;
+    locals.users = users;
+    locals.rooms = rooms || [];
+    locals.error = null;
+
+    res.render('dashboard', locals);
+
   } catch (err) {
     console.error('Dashboard error:', err);
-    res.status(500).render('dashboard', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
+    res.status(500).render('dashboard', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      layout: 'layouts/main'
+    });
   }
 };
+
 
 exports.about = (req, res) => {
   try {
@@ -77,365 +97,617 @@ exports.about = (req, res) => {
   }
 };
 
-exports.quiz = (req, res) => {
+exports.quiz = async (req, res) => {
   try {
     if (!req.user) {
       return res.redirect('/login');
     }
-    usersDB.all('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id ORDER BY rooms.created_at DESC', [], (err, rooms) => {
-      // ตรวจสอบว่าผู้ใช้มีห้องหรือไม่
-      usersDB.get('SELECT id FROM rooms WHERE creator_id = ?', [req.user.id], (err2, userRoom) => {
-        const userWithRoom = { ...req.user, room_id: userRoom ? userRoom.id : null };
-        const locals = {
-          title: "FoodQuiz",
-          description: "FoodQuiz",
-          header: "Page header",
-          layout: 'layouts/main',
-          user: userWithRoom,
-          rooms: rooms || [],
-          error: err ? 'เกิดข้อผิดพลาดในการดึงข้อมูลห้อง' : null
-        };
-        if (err) {
-          console.error('Quiz DB error:', err);
+
+    // ดึงข้อมูล rooms ทั้งหมด
+    const rooms = await new Promise((resolve, reject) => {
+      usersDB.all(
+        `SELECT rooms.*, users.name as owner_name
+         FROM rooms
+         JOIN users ON rooms.creator_id = users.id
+         ORDER BY rooms.created_at DESC`,
+        [],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows);
         }
-        res.render('quiz', locals);
-      });
+      );
     });
+
+    // ตรวจสอบว่าผู้ใช้มีห้องหรือไม่
+    const userRoom = await new Promise((resolve, reject) => {
+      usersDB.get(
+        `SELECT id FROM rooms WHERE creator_id = ?`,
+        [req.user.id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
+        }
+      );
+    });
+
+    const userWithRoom = {
+      ...req.user,
+      room_id: userRoom ? userRoom.id : null
+    };
+
+    const locals = {
+      title: "FoodQuiz",
+      description: "FoodQuiz",
+      header: "Page header",
+      layout: 'layouts/main',
+      user: userWithRoom,
+      rooms: rooms || [],
+      error: null
+    };
+
+    res.render('quiz', locals);
+
   } catch (err) {
     console.error('Quiz error:', err);
-    res.status(500).render('quiz', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main' });
+    res.status(500).render('quiz', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      layout: 'layouts/main'
+    });
   }
 };
 
-exports.createRoomPage = (req, res) => {
+
+exports.createRoomPage = async (req, res) => {
   try {
     if (!req.user) {
       return res.redirect('/login');
     }
+
     const userId = req.user.id;
-    usersDB.get('SELECT * FROM rooms WHERE creator_id = ?', [userId], (err, room) => {
-      if (err) {
-        console.error('CreateRoomPage DB error:', err);
-        return res.render('create-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
-      }
-      res.render('create-room', { error: null, room, user: req.user });
+
+    const room = await new Promise((resolve, reject) => {
+      usersDB.get(
+        `SELECT * FROM rooms WHERE creator_id = ?`,
+        [userId],
+        (err, row) => {
+          if (err) return reject(err);
+          resolve(row || null);
+        }
+      );
     });
+
+    res.render('create-room', {
+      error: null,
+      room,
+      user: req.user,
+      layout: 'layouts/main'
+    });
+
   } catch (err) {
     console.error('CreateRoomPage error:', err);
-    res.status(500).render('create-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
+    res.status(500).render('create-room', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      room: null,
+      user: req.user,
+      layout: 'layouts/main'
+    });
   }
 };
 
-exports.createRoomPost = (req, res) => {
+
+exports.createRoomPost = async (req, res) => {
   try {
     if (!req.user) {
       return res.redirect('/login');
     }
+
     const userId = req.user.id;
-    const { name, is_private, password, room_color } = req.body;
-    const max_players = 5; // บังคับให้เล่นได้ 5 คนเสมอ (ไม่รวม creator)
-    usersDB.get('SELECT * FROM rooms WHERE creator_id = ?', [userId], (err, room) => {
-      if (err) {
-        console.error('CreateRoomPost DB error:', err);
-        return res.render('create-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
-      }
-      if (room) {
-        return res.render('create-room', { error: 'คุณสร้างห้องได้เพียง 1 ห้องเท่านั้น กรุณาลบห้องเดิมก่อนสร้างใหม่', room, user: req.user });
-      }
+    let { name, is_private, password, room_color } = req.body;
+
+    // Normalize / validate ข้อมูลเบื้องต้น
+    const max_players = 5;                   // บังคับ 5 คน (ไม่รวม creator)
+    name = (name || '').trim();
+    room_color = room_color || '#FFFFFF';
+    const isPrivate = (is_private === true || is_private === '1' || is_private === 'true') ? 1 : 0;
+
+    if (!name) {
+      return res.render('create-room', {
+        error: 'กรุณากรอกชื่อห้อง',
+        room: null,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    if (isPrivate && !password) {
+      return res.render('create-room', {
+        error: 'ห้องส่วนตัวต้องมีรหัสผ่าน',
+        room: null,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // เช็คว่าผู้ใช้มีห้องอยู่แล้วหรือไม่
+    const existingRoom = await new Promise((resolve, reject) => {
+      usersDB.get(
+        `SELECT * FROM rooms WHERE creator_id = ?`,
+        [userId],
+        (err, row) => (err ? reject(err) : resolve(row || null))
+      );
+    });
+
+    if (existingRoom) {
+      return res.render('create-room', {
+        error: 'คุณสร้างห้องได้เพียง 1 ห้องเท่านั้น กรุณาลบห้องเดิมก่อนสร้างใหม่',
+        room: existingRoom,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // สร้างห้องใหม่
+    await new Promise((resolve, reject) => {
       usersDB.run(
-        'INSERT INTO rooms (name, creator_id, max_players, is_private, password, room_color) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, userId, max_players, is_private ? 1 : 0, password || null, room_color || '#FFFFFF'],
+        `INSERT INTO rooms (name, creator_id, max_players, is_private, password, room_color)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [name, userId, max_players, isPrivate, password || null, room_color],
         function (err) {
-          if (err) {
-            console.error('Room creation error:', err);
-            let errorMsg = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
-            if (err.message && err.message.includes('UNIQUE')) {
-              errorMsg = 'ชื่อห้องนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น';
-            }
-            return res.render('create-room', { error: errorMsg, room: null, user: req.user });
-          }
-          // ไม่ต้องเพิ่ม creator เป็นผู้เล่นใน room_players
-          // สามารถเพิ่ม logic ให้ creator เลือกคำถามได้ในหน้า quiz หรือหน้า admin room
-          res.redirect('/dashboard');
+          if (err) return reject(err);
+          resolve(this.lastID);
         }
       );
     });
+
+    // สำเร็จ -> ไปหน้า /quiz
+    return res.redirect('/quiz');
+
   } catch (err) {
     console.error('CreateRoomPost error:', err);
-    res.status(500).render('create-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
+
+    let errorMsg = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+    if (err?.message?.includes('UNIQUE')) {
+      errorMsg = 'ชื่อห้องนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น';
+    }
+
+    return res.status(500).render('create-room', {
+      error: errorMsg,
+      room: null,
+      user: req.user,
+      layout: 'layouts/main'
+    });
   }
 };
 
-exports.gameRoomPage = (req, res) => {
-  try {
-    if (!req.user) {
-      return res.redirect('/login');
-    }
-    const roomId = req.params.roomId;
-    usersDB.get('SELECT rooms.*, users.name as owner_name FROM rooms JOIN users ON rooms.creator_id = users.id WHERE rooms.id = ?', [roomId], (err, room) => {
-      if (err || !room) {
-        return res.status(404).render('dashboard', { error: 'ไม่พบห้องนี้', layout: 'layouts/main', user: req.user, rooms: [], users: [] });
-      }
-      // ดึงผู้เล่นในห้อง
-      usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err2, players) => {
-        if (err2) players = [];
-        // ดึงคำถามทั้งหมดของห้องนี้
-        usersDB.all(`
-          SELECT q.* FROM questions q 
-          JOIN room_questions rq ON q.id = rq.question_id 
-          WHERE rq.room_id = ?
-          ORDER BY rq.id ASC
-        `, [roomId], (err3, questions) => {
-          if (err3) questions = [];
-          console.log(`Loaded ${questions.length} questions for room ${roomId}:`, questions.map(q => q.id));
-          // ดึงวัตถุดิบทั้งหมดจากตาราง ingredient
-          usersDB.all('SELECT name, price, image_file FROM ingredient', [], (err4, ingredients) => {
-            if (err4) ingredients = [];
-            // ดึงสูตรอาหารและวัตถุดิบที่สัมพันธ์กัน
-            usersDB.all('SELECT meal.name as meal_name, meal.image_file, GROUP_CONCAT(meal_ingredient.ingredient) as ingredients FROM meal JOIN meal_ingredient ON meal.id = meal_ingredient.meal_id GROUP BY meal.id', [], (err5, mealIngredients) => {
-              if (err5) mealIngredients = [];
-              // ดึงอาหารที่สุ่มได้ของผู้เล่นในห้องนี้
-              usersDB.all(`
-                SELECT 
-                  pf.user_id,
-                  u.name as user_name,
-                  GROUP_CONCAT(pf.food_name) as foods
-                FROM player_foods pf
-                JOIN users u ON pf.user_id = u.id
-                WHERE pf.room_id = ?
-                GROUP BY pf.user_id
-              `, [roomId], (err6, playerFoods) => {
-                if (err6) playerFoods = [];
-                
-                // แปลงข้อมูลให้อยู่ในรูปแบบที่ใช้งานง่าย
-                const playerFoodsMap = {};
-                playerFoods.forEach(pf => {
-                  playerFoodsMap[pf.user_id] = pf.foods ? pf.foods.split(',') : [];
-                });
-                
-                // ดึงวัตถุดิบของผู้เล่นในห้องนี้
-                usersDB.all(`
-                  SELECT 
-                    pi.user_id,
-                    GROUP_CONCAT(pi.ingredient_name) as ingredients
-                  FROM player_ingredients pi
-                  WHERE pi.room_id = ?
-                  GROUP BY pi.user_id
-                `, [roomId], (err7, playerIngredients) => {
-                  if (err7) playerIngredients = [];
-                  
-                  // แปลงข้อมูลให้อยู่ในรูปแบบที่ใช้งานง่าย
-                  const playerIngredientsMap = {};
-                  playerIngredients.forEach(pi => {
-                    playerIngredientsMap[pi.user_id] = pi.ingredients ? pi.ingredients.split(',') : [];
-                  });
-                  
-                  // ดึงสถานะเกมของผู้เล่น
-                  usersDB.get('SELECT * FROM game_state WHERE room_id = ? AND user_id = ?', [roomId, req.user.id], (err8, gameStateRow) => {
-                    if (err8) gameStateRow = null;
-                    
-                    let gameState = null;
-                    if (gameStateRow) {
-                      gameState = {
-                        currentQuestion: gameStateRow.current_question,
-                        answeredQuestions: JSON.parse(gameStateRow.answered_questions || '[]'),
-                        gameStarted: Boolean(gameStateRow.game_started),
-                        gameFinished: Boolean(gameStateRow.game_finished)
-                      };
-                      console.log(`Game state for user ${req.user.id} in room ${roomId}:`, gameState);
-                    } else {
-                      console.log(`No game state found for user ${req.user.id} in room ${roomId}`);
-                    }
-                    
-                    res.render('game-room', {
-                      layout: 'layouts/main',
-                      user: req.user,
-                      room,
-                      players,
-                      questions,
-                      ingredients,
-                      mealIngredients,
-                      playerFoods: playerFoodsMap,
-                      playerIngredients: playerIngredientsMap,
-                      gameState
-                    });
-                  });
-                });
-              });
-            });
-          });
-        });
+
+exports.gameRoomPage = async (req, res) => {
+  // helper: get (throw error ถ้า query พัง)
+  const dbGet = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.get(sql, params, (err, row) => (err ? reject(err) : resolve(row)));
+    });
+
+  // helper: all (ปลอดภัย ถ้าพังจะคืน [])
+  const dbAllSafe = (sql, params = [], label = '') =>
+    new Promise((resolve) => {
+      usersDB.all(sql, params, (err, rows) => {
+        if (err) {
+          console.error(`${label || 'DB'} error:`, err);
+          return resolve([]);
+        }
+        resolve(rows || []);
       });
     });
+
+  try {
+    if (!req.user) return res.redirect('/login');
+
+    const roomId = req.params.roomId;
+
+    // 1) ดึงข้อมูลห้อง (ถ้าไม่พบ -> 404)
+    const room = await dbGet(
+      `SELECT rooms.*, users.name as owner_name
+       FROM rooms
+       JOIN users ON rooms.creator_id = users.id
+       WHERE rooms.id = ?`,
+      [roomId]
+    );
+
+    if (!room) {
+      return res.status(404).render('dashboard', {
+        error: 'ไม่พบห้องนี้',
+        layout: 'layouts/main',
+        user: req.user,
+        rooms: [],
+        users: []
+      });
+    }
+
+    // 2) ดึงข้อมูลประกอบทั้งหมดแบบขนาน
+    const [
+      players,
+      questions,
+      ingredients,
+      mealIngredients,
+      playerFoods,
+      playerIngredients
+    ] = await Promise.all([
+      dbAllSafe(
+        `SELECT users.id, users.name, rp.score, rp.is_owner
+         FROM room_players rp
+         JOIN users ON rp.user_id = users.id
+         WHERE rp.room_id = ?`,
+        [roomId],
+        'Players'
+      ),
+      dbAllSafe(
+        `SELECT q.*
+         FROM questions q
+         JOIN room_questions rq ON q.id = rq.question_id
+         WHERE rq.room_id = ?
+         ORDER BY rq.id ASC`,
+        [roomId],
+        'Questions'
+      ),
+      dbAllSafe(
+        `SELECT name, price, image_file FROM ingredient`,
+        [],
+        'Ingredients'
+      ),
+      dbAllSafe(
+        `SELECT m.name as meal_name,
+                m.image_file,
+                GROUP_CONCAT(mi.ingredient) as ingredients
+         FROM meal m
+         JOIN meal_ingredient mi ON m.id = mi.meal_id
+         GROUP BY m.id`,
+        [],
+        'MealIngredients'
+      ),
+      dbAllSafe(
+        `SELECT pf.user_id, u.name as user_name,
+                GROUP_CONCAT(pf.food_name) as foods
+         FROM player_foods pf
+         JOIN users u ON pf.user_id = u.id
+         WHERE pf.room_id = ?
+         GROUP BY pf.user_id`,
+        [roomId],
+        'PlayerFoods'
+      ),
+      dbAllSafe(
+        `SELECT pi.user_id,
+                GROUP_CONCAT(pi.ingredient_name) as ingredients
+         FROM player_ingredients pi
+         WHERE pi.room_id = ?
+         GROUP BY pi.user_id`,
+        [roomId],
+        'PlayerIngredients'
+      )
+    ]);
+
+    // 3) แปลงข้อมูล map ให้ใช้งานง่าย
+    const playerFoodsMap = {};
+    playerFoods.forEach(pf => {
+      playerFoodsMap[pf.user_id] = pf.foods ? pf.foods.split(',') : [];
+    });
+
+    const playerIngredientsMap = {};
+    playerIngredients.forEach(pi => {
+      playerIngredientsMap[pi.user_id] = pi.ingredients ? pi.ingredients.split(',') : [];
+    });
+
+    // 4) game state ของผู้ใช้ปัจจุบัน (พัง -> null)
+    let gameState = null;
+    try {
+      const gameStateRow = await dbGet(
+        `SELECT * FROM game_state WHERE room_id = ? AND user_id = ?`,
+        [roomId, req.user.id]
+      );
+      if (gameStateRow) {
+        gameState = {
+          currentQuestion: gameStateRow.current_question,
+          answeredQuestions: JSON.parse(gameStateRow.answered_questions || '[]'),
+          gameStarted: Boolean(gameStateRow.game_started),
+          gameFinished: Boolean(gameStateRow.game_finished)
+        };
+      }
+    } catch (e) {
+      console.error('GameState error:', e);
+      gameState = null;
+    }
+
+    // 5) render
+    return res.render('game-room', {
+      layout: 'layouts/main',
+      user: req.user,
+      room,
+      players,
+      questions,
+      ingredients,
+      mealIngredients,
+      playerFoods: playerFoodsMap,
+      playerIngredients: playerIngredientsMap,
+      gameState
+    });
+
   } catch (err) {
     console.error('GameRoomPage error:', err);
-    res.status(500).render('dashboard', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', layout: 'layouts/main', user: req.user, rooms: [], users: [] });
-  }
-};
-
-exports.editRoomPage = (req, res) => {
-  try {
-    if (!req.user) {
-      return res.redirect('/login');
-    }
-    const userId = req.user.id;
-    usersDB.get('SELECT * FROM rooms WHERE creator_id = ?', [userId], (err, room) => {
-      if (err) {
-        console.error('EditRoomPage DB error:', err);
-        return res.render('edit-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
-      }
-      if (!room) {
-        return res.redirect('/create-room');
-      }
-      res.render('edit-room', { error: null, room, user: req.user });
+    return res.status(500).render('dashboard', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      layout: 'layouts/main',
+      user: req.user,
+      rooms: [],
+      users: []
     });
-  } catch (err) {
-    console.error('EditRoomPage error:', err);
-    res.status(500).render('edit-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
   }
 };
 
-exports.editRoomPost = (req, res) => {
+
+exports.editRoomPage = async (req, res) => {
   try {
     if (!req.user) {
       return res.redirect('/login');
     }
+
     const userId = req.user.id;
-    const { name, is_private, password, room_color } = req.body;
-    
-    // Debug: ตรวจสอบข้อมูลที่ส่งมา
-    
-    usersDB.get('SELECT * FROM rooms WHERE creator_id = ?', [userId], (err, room) => {
-      if (err || !room) {
-        console.error('EditRoomPost DB error:', err);
-        return res.render('edit-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
-      }
-      
-      // แปลง is_private เป็น boolean ที่ถูกต้อง
-      const isPrivate = is_private === '1' || is_private === true || is_private === 1;
-      console.log('Converted isPrivate:', isPrivate);
-      
-      usersDB.run(
-        'UPDATE rooms SET name = ?, is_private = ?, password = ?, room_color = ? WHERE creator_id = ?',
-        [name, isPrivate ? 1 : 0, password || null, room_color || '#FFFFFF', userId],
-        function (err) {
-          if (err) {
-            console.error('Room update error:', err);
-            let errorMsg = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
-            if (err.message && err.message.includes('UNIQUE')) {
-              errorMsg = 'ชื่อห้องนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น';
-            }
-            return res.render('edit-room', { error: errorMsg, room, user: req.user });
-          }
-          res.redirect('/quiz');
-        }
+
+    const room = await new Promise((resolve, reject) => {
+      usersDB.get(
+        `SELECT * FROM rooms WHERE creator_id = ?`,
+        [userId],
+        (err, row) => (err ? reject(err) : resolve(row || null))
       );
     });
+
+    if (!room) {
+      return res.redirect('/create-room');
+    }
+
+    return res.render('edit-room', {
+      error: null,
+      room,
+      user: req.user,
+      layout: 'layouts/main'
+    });
+
   } catch (err) {
-    console.error('EditRoomPost error:', err);
-    res.status(500).render('edit-room', { error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', room: null, user: req.user });
+    console.error('EditRoomPage error:', err);
+    return res.status(500).render('edit-room', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      room: null,
+      user: req.user,
+      layout: 'layouts/main'
+    });
   }
 };
 
-exports.deleteRoom = (req, res) => {
+exports.editRoomPost = async (req, res) => {
+  // helper
+  const dbGet = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || null)));
+    });
+
+  const dbRun = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.run(sql, params, function (err) {
+        if (err) return reject(err);
+        resolve(this.changes);
+      });
+    });
+
+  try {
+    if (!req.user) return res.redirect('/login');
+
+    const userId = req.user.id;
+    let { name, is_private, password, room_color } = req.body;
+
+    // Normalize
+    name = (name || '').trim();
+    const isPrivate = (is_private === '1' || is_private === 1 || is_private === true || is_private === 'true') ? 1 : 0;
+    room_color = room_color || '#FFFFFF';
+
+    // Validate
+    if (!name) {
+      return res.render('edit-room', {
+        error: 'กรุณากรอกชื่อห้อง',
+        room: null,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // ห้องของผู้ใช้
+    const room = await dbGet(`SELECT * FROM rooms WHERE creator_id = ?`, [userId]);
+    if (!room) return res.redirect('/create-room');
+
+    // ถ้าเป็น private แต่ไม่กรอกรหัสใหม่ ให้คงรหัสเดิมไว้
+    const newPassword = isPrivate ? (password ?? room.password ?? null) : null;
+
+    // อัปเดต
+    try {
+      await dbRun(
+        `UPDATE rooms
+         SET name = ?, is_private = ?, password = ?, room_color = ?
+         WHERE creator_id = ?`,
+        [name, isPrivate, newPassword, room_color, userId]
+      );
+    } catch (err) {
+      console.error('Room update error:', err);
+      let errorMsg = 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+      if (err?.message?.includes('UNIQUE')) {
+        errorMsg = 'ชื่อห้องนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น';
+      }
+      return res.render('edit-room', {
+        error: errorMsg,
+        room,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // สำเร็จ
+    return res.redirect('/quiz');
+
+  } catch (err) {
+    console.error('EditRoomPost error:', err);
+    return res.status(500).render('edit-room', {
+      error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
+      room: null,
+      user: req.user,
+      layout: 'layouts/main'
+    });
+  }
+};
+
+
+exports.deleteRoom = async (req, res) => {
+  // helpers
+  const dbGet = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || null)));
+    });
+
+  const dbRun = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.run(sql, params, function (err) {
+        if (err) return reject(err);
+        resolve(this.changes);
+      });
+    });
+
+  const dbExec = (sql) =>
+    new Promise((resolve, reject) => {
+      usersDB.exec(sql, (err) => (err ? reject(err) : resolve()));
+    });
+
   try {
     if (!req.user) {
       return res.status(401).json({ error: 'ไม่ได้รับอนุญาต' });
     }
+
     const roomId = req.params.id;
     const userId = req.user.id;
+
     // ตรวจสอบสิทธิ์เจ้าของห้อง
-    usersDB.get('SELECT * FROM rooms WHERE id = ? AND creator_id = ?', [roomId, userId], (err, room) => {
-      if (err || !room) {
-        return res.status(404).json({ error: 'ไม่พบห้องหรือไม่มีสิทธิ์ลบ' });
-      }
-      // ลบห้องและข้อมูลที่เกี่ยวข้อง
-      usersDB.run('DELETE FROM room_players WHERE room_id = ?', [roomId], (err1) => {
-        if (err1) console.error('Delete room_players error:', err1);
-        usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err2) => {
-          if (err2) console.error('Delete room_questions error:', err2);
-          usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err3) => {
-            if (err3) console.error('Delete player_foods error:', err3);
-            usersDB.run('DELETE FROM rooms WHERE id = ?', [roomId], (err4) => {
-              if (err4) {
-                console.error('Delete room error:', err4);
-                return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
-              }
-              // --- Notify all users in the room via socket.io ---
-              const io = req.app.get('io');
-              if (io) {
-                io.to(`room_${roomId}`).emit('room_deleted', { message: 'ห้องนี้ถูกลบโดยเจ้าของห้อง' });
-              }
-              res.json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
-            });
-          });
-        });
-      });
-    });
+    const room = await dbGet(
+      `SELECT * FROM rooms WHERE id = ? AND creator_id = ?`,
+      [roomId, userId]
+    );
+    if (!room) {
+      return res.status(404).json({ error: 'ไม่พบห้องหรือไม่มีสิทธิ์ลบ' });
+    }
+
+    // เริ่มธุรกรรม
+    await dbExec('BEGIN IMMEDIATE TRANSACTION');
+
+    try {
+      // ลบข้อมูลที่เกี่ยวข้อง (ตามลำดับที่ปลอดภัย)
+      await dbRun(`DELETE FROM room_players     WHERE room_id = ?`, [roomId]);
+      await dbRun(`DELETE FROM room_questions   WHERE room_id = ?`, [roomId]);
+      await dbRun(`DELETE FROM player_foods     WHERE room_id = ?`, [roomId]);
+      await dbRun(`DELETE FROM player_ingredients WHERE room_id = ?`, [roomId]); // เผื่อมีตารางนี้
+      await dbRun(`DELETE FROM game_state       WHERE room_id = ?`, [roomId]);   // เผื่อมีตารางนี้
+      await dbRun(`DELETE FROM rooms            WHERE id = ?`, [roomId]);
+
+      // commit
+      await dbExec('COMMIT');
+    } catch (innerErr) {
+      // rollback แล้วโยนต่อ
+      try { await dbExec('ROLLBACK'); } catch (_) {}
+      console.error('DeleteRoom TX error:', innerErr);
+      return res.status(500).json({ error: 'เกิดข้อผิดพลาดในการลบห้อง' });
+    }
+
+    // แจ้งผู้ใช้ในห้องผ่าน socket.io
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`room_${roomId}`).emit('room_deleted', { message: 'ห้องนี้ถูกลบโดยเจ้าของห้อง' });
+    }
+
+    return res.json({ success: true, message: 'ลบห้องเรียบร้อยแล้ว' });
+
   } catch (err) {
     console.error('DeleteRoom error:', err);
-    res.status(500).json({ error: 'เกิดข้อผิดพลาด' });
+    return res.status(500).json({ error: 'เกิดข้อผิดพลาด' });
   }
 };
 
-exports.profilePage = (req, res) => {
+
+exports.profilePage = async (req, res) => {
+  // helpers
+  const dbGet = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || null)));
+    });
+
+  const dbAllSafe = (sql, params = [], label = '') =>
+    new Promise((resolve) => {
+      usersDB.all(sql, params, (err, rows) => {
+        if (err) {
+          console.error(`${label || 'DB'} error:`, err);
+          return resolve([]);
+        }
+        resolve(rows || []);
+      });
+    });
+
   try {
-    if (!req.user) {
-      return res.redirect('/login');
-    }
-    
+    if (!req.user) return res.redirect('/login');
+
     const userId = req.user.id;
-    
-    // ดึงสถิติของผู้ใช้
-    usersDB.get(`
-      SELECT 
-        COUNT(DISTINCT rp.room_id) as totalGames,
-        COALESCE(SUM(rp.score), 0) as totalScore,
-        COALESCE(AVG(rp.score), 0) as averageScore,
-        COUNT(DISTINCT r.id) as roomsCreated
-      FROM users u
-      LEFT JOIN room_players rp ON u.id = rp.user_id
-      LEFT JOIN rooms r ON u.id = r.creator_id
-      WHERE u.id = ?
-    `, [userId], (err, stats) => {
-      if (err) {
-        console.error('Profile stats error:', err);
-        stats = { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
-      }
-      
-      // ดึงกิจกรรมล่าสุด (สมมติว่ามีตาราง activity หรือใช้ข้อมูลจาก room_players)
-      usersDB.all(`
+
+    // คิวรีสถิติ + กิจกรรมล่าสุด พร้อมกัน
+    const [statsRow, recentActivity] = await Promise.all([
+      dbGet(
+        `
         SELECT 
-          'เล่นเกมในห้อง ' || r.name as description,
+          COUNT(DISTINCT rp.room_id) AS totalGames,
+          COALESCE(SUM(rp.score), 0) AS totalScore,
+          COALESCE(AVG(rp.score), 0) AS averageScore,
+          COUNT(DISTINCT r.id) AS roomsCreated
+        FROM users u
+        LEFT JOIN room_players rp ON u.id = rp.user_id
+        LEFT JOIN rooms r ON u.id = r.creator_id
+        WHERE u.id = ?
+        `,
+        [userId]
+      ).catch(err => {
+        console.error('Profile stats error:', err);
+        return { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
+      }),
+      dbAllSafe(
+        `
+        SELECT 
+          'เล่นเกมในห้อง ' || r.name AS description,
           rp.created_at
         FROM room_players rp
         JOIN rooms r ON rp.room_id = r.id
         WHERE rp.user_id = ?
         ORDER BY rp.created_at DESC
         LIMIT 5
-      `, [userId], (err2, recentActivity) => {
-        if (err2) {
-          console.error('Recent activity error:', err2);
-          recentActivity = [];
-        }
-        
-        const locals = {
-          title: "โปรไฟล์ - FoodQuiz",
-          description: "จัดการข้อมูลส่วนตัว",
-          layout: 'layouts/main',
-          user: req.user,
-          stats: stats || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-          recentActivity: recentActivity || [],
-          error: null,
-          success: null
-        };
-        
-        res.render('profile', locals);
-      });
+        `,
+        [userId],
+        'Recent activity'
+      )
+    ]);
+
+    const stats = statsRow || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
+
+    return res.render('profile', {
+      title: "โปรไฟล์ - FoodQuiz",
+      description: "จัดการข้อมูลส่วนตัว",
+      layout: 'layouts/main',
+      user: req.user,
+      stats,
+      recentActivity: recentActivity || [],
+      error: null,
+      success: null
     });
+
   } catch (err) {
     console.error('Profile page error:', err);
-    res.status(500).render('profile', { 
+    return res.status(500).render('profile', { 
       error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง', 
       layout: 'layouts/main',
       user: req.user,
@@ -445,17 +717,41 @@ exports.profilePage = (req, res) => {
   }
 };
 
-exports.profileUpdate = (req, res) => {
+
+exports.profileUpdate = async (req, res) => {
+  // Helpers
+  const dbGet = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.get(sql, params, (err, row) => (err ? reject(err) : resolve(row || null)));
+    });
+
+  const dbRun = (sql, params = []) =>
+    new Promise((resolve, reject) => {
+      usersDB.run(sql, params, function (err) {
+        if (err) return reject(err);
+        resolve(this.changes);
+      });
+    });
+
+  const dbAllSafe = (sql, params = [], label = '') =>
+    new Promise((resolve) => {
+      usersDB.all(sql, params, (err, rows) => {
+        if (err) {
+          console.error(`${label || 'DB'} error:`, err);
+          return resolve([]);
+        }
+        resolve(rows || []);
+      });
+    });
+
   try {
-    if (!req.user) {
-      return res.redirect('/login');
-    }
-    
+    if (!req.user) return res.redirect('/login');
+
     const userId = req.user.id;
-    const { name } = req.body;
-    
-    // ตรวจสอบข้อมูล
-    if (!name || name.trim().length < 2 || name.trim().length > 50) {
+    const nameInput = (req.body?.name || '').trim();
+
+    // Validate
+    if (!nameInput || nameInput.length < 2 || nameInput.length > 50) {
       return res.render('profile', {
         error: 'ชื่อต้องมีความยาวระหว่าง 2-50 ตัวอักษร',
         layout: 'layouts/main',
@@ -464,115 +760,77 @@ exports.profileUpdate = (req, res) => {
         recentActivity: []
       });
     }
-    
-    const trimmedName = name.trim();
-    
-    // ตรวจสอบว่าชื่อซ้ำหรือไม่
-    usersDB.get('SELECT id FROM users WHERE name = ? AND id != ?', [trimmedName, userId], (err, existingUser) => {
-      if (err) {
-        console.error('Profile update check error:', err);
-        return res.render('profile', {
-          error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
-          layout: 'layouts/main',
-          user: req.user,
-          stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-          recentActivity: []
-        });
-      }
-      
-      if (existingUser) {
-        return res.render('profile', {
-          error: 'ชื่อนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น',
-          layout: 'layouts/main',
-          user: req.user,
-          stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-          recentActivity: []
-        });
-      }
-      
-      // อัปเดตชื่อ
-      usersDB.run('UPDATE users SET name = ? WHERE id = ?', [trimmedName, userId], (err2) => {
-        if (err2) {
-          console.error('Profile update error:', err2);
-          return res.render('profile', {
-            error: 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล กรุณาลองใหม่อีกครั้ง',
-            layout: 'layouts/main',
-            user: req.user,
-            stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-            recentActivity: []
-          });
-        }
-        
-        // อัปเดตข้อมูลผู้ใช้ใน session
-        req.user.name = trimmedName;
-        
-        // ดึงสถิติใหม่
-        executeWithRetry(async () => {
-          return new Promise((resolve, reject) => {
-            usersDB.get(`
-              SELECT 
-                COUNT(DISTINCT rp.room_id) as totalGames,
-                COALESCE(SUM(rp.score), 0) as totalScore,
-                COALESCE(AVG(rp.score), 0) as averageScore,
-                COUNT(DISTINCT r.id) as roomsCreated
-              FROM users u
-              LEFT JOIN room_players rp ON u.id = rp.user_id
-              LEFT JOIN rooms r ON u.id = r.creator_id
-              WHERE u.id = ?
-            `, [userId], (err3, stats) => {
-              if (err3) {
-                console.error('Profile stats error:', err3);
-                stats = { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
-              }
-              
-              // ดึงกิจกรรมล่าสุด
-              executeWithRetry(async () => {
-                return new Promise((resolve2, reject2) => {
-                  usersDB.all(`
-                    SELECT 
-                      'เล่นเกมในห้อง ' || r.name as description,
-                      rp.created_at
-                    FROM room_players rp
-                    JOIN rooms r ON rp.room_id = r.id
-                    WHERE rp.user_id = ?
-                    ORDER BY rp.created_at DESC
-                    LIMIT 5
-                  `, [userId], (err4, recentActivity) => {
-                    if (err4) {
-                      console.error('Recent activity error:', err4);
-                      recentActivity = [];
-                    }
-                    
-                    res.render('profile', {
-                      success: 'อัปเดตข้อมูลเรียบร้อยแล้ว',
-                      layout: 'layouts/main',
-                      user: req.user,
-                      stats: stats || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-                      recentActivity: recentActivity || [],
-                      error: null
-                    });
-                    resolve2();
-                  });
-                });
-              });
-              resolve();
-            });
-          });
-        }).catch(err => {
-          console.error('Profile update error:', err);
-          res.status(500).render('profile', {
-            error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
-            layout: 'layouts/main',
-            user: req.user,
-            stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
-            recentActivity: []
-          });
-        });
+
+    // Check duplicate name (ยกเว้นตัวเอง)
+    const existing = await dbGet(
+      `SELECT id FROM users WHERE name = ? AND id != ?`,
+      [nameInput, userId]
+    );
+    if (existing) {
+      return res.render('profile', {
+        error: 'ชื่อนี้ถูกใช้ไปแล้ว กรุณาใช้ชื่ออื่น',
+        layout: 'layouts/main',
+        user: req.user,
+        stats: { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 },
+        recentActivity: []
       });
+    }
+
+    // Update
+    await dbRun(`UPDATE users SET name = ? WHERE id = ?`, [nameInput, userId]);
+
+    // Update session user
+    req.user.name = nameInput;
+
+    // Fetch stats + recent activity พร้อมกัน
+    const [statsRow, recentActivity] = await Promise.all([
+      dbGet(
+        `
+        SELECT 
+          COUNT(DISTINCT rp.room_id) AS totalGames,
+          COALESCE(SUM(rp.score), 0) AS totalScore,
+          COALESCE(AVG(rp.score), 0) AS averageScore,
+          COUNT(DISTINCT r.id) AS roomsCreated
+        FROM users u
+        LEFT JOIN room_players rp ON u.id = rp.user_id
+        LEFT JOIN rooms r ON u.id = r.creator_id
+        WHERE u.id = ?
+        `,
+        [userId]
+      ).catch(err => {
+        console.error('Profile stats error:', err);
+        return { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
+      }),
+      dbAllSafe(
+        `
+        SELECT 
+          'เล่นเกมในห้อง ' || r.name AS description,
+          rp.created_at
+        FROM room_players rp
+        JOIN rooms r ON rp.room_id = r.id
+        WHERE rp.user_id = ?
+        ORDER BY rp.created_at DESC
+        LIMIT 5
+        `,
+        [userId],
+        'Recent activity'
+      )
+    ]);
+
+    const stats = statsRow || { totalGames: 0, totalScore: 0, averageScore: 0, roomsCreated: 0 };
+
+    return res.render('profile', {
+      success: 'อัปเดตข้อมูลเรียบร้อยแล้ว',
+      layout: 'layouts/main',
+      user: req.user,
+      stats,
+      recentActivity: recentActivity || [],
+      error: null
     });
+
   } catch (err) {
     console.error('Profile update error:', err);
-    res.status(500).render('profile', {
+    return res.status(500).render('profile', {
       error: 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง',
       layout: 'layouts/main',
       user: req.user,

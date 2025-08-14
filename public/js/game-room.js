@@ -26,7 +26,7 @@ console.log('Final game state:', gameState);
 // --- Room deleted event ---
 socket.on('room_deleted', function (data) {
   showNotification('ห้องนี้ถูกลบแล้ว', 'info');
-  window.location.href = '/dashboard';
+  window.location.href = '/quiz';
 });
 
 // เมื่อห้องเต็ม
@@ -322,11 +322,270 @@ socket.on('player_cooked_meal', ({ userId, mealName, usedIngredients }) => {
   // สามารถเพิ่มการแสดง notification ได้ที่นี่
 });
 
+// รับอาหารที่สุ่มได้เมื่อเข้าห้อง
+socket.on('foods_assigned', ({ roomId, userId, foods }) => {
+  console.log(`ได้รับอาหารที่สุ่ม: ${foods.join(', ')}`);
+  
+  // อัปเดตอาหารใน player list
+  updatePlayerFoodsInList(userId, foods);
+  
+  // ถ้าเป็นผู้เล่นเอง ให้อัปเดตส่วนแสดงอาหารด้วย
+  if ((window.user && window.user.id === userId) || (user && user.id === userId)) {
+    updateMyFoodsDisplay(foods);
+  }
+});
+
+// รับรายการอาหารทั้งหมดในห้อง
+socket.on('room_foods', ({ roomId, foods }) => {
+  console.log('รายการอาหารทั้งหมดในห้อง:', foods);
+  
+  // อัปเดตอาหารของทุกผู้เล่นใน player list
+  foods.forEach(({ userId, userName, foods: playerFoods }) => {
+    updatePlayerFoodsInList(userId, playerFoods);
+  });
+});
+
+// รับอาหารของตัวเอง
+socket.on('my_foods', ({ roomId, userId, foods }) => {
+  console.log(`อาหารของตัวเอง: ${foods.join(', ')}`);
+  
+  // อัปเดตส่วนแสดงอาหารของตัวเอง
+  updateMyFoodsDisplay(foods);
+  
+  // อัปเดตอาหารใน player list
+  updatePlayerFoodsInList(userId, foods);
+});
+
+// รับการอัปเดตรายชื่อผู้เล่น
+socket.on('player_list_updated', ({ roomId, players }) => {
+  console.log('อัปเดตรายชื่อผู้เล่น:', players);
+  updatePlayerList(players);
+});
+
+// รับการอัปเดตจำนวนผู้เล่นในห้อง
+socket.on('update_room_player_count', ({ roomId, count }) => {
+  console.log('อัปเดตจำนวนผู้เล่น:', count);
+  updatePlayerCount(count);
+});
+
+// รับการแจ้งเตือนเมื่อมีผู้เล่นใหม่เข้าร่วม
+socket.on('user_joined', ({ user, socketId }) => {
+  console.log(`ผู้เล่น ${user.name} เข้าร่วมห้อง`);
+  showNotification(`${user.name} เข้าร่วมห้อง`, 'info');
+});
+
+// รับการแจ้งเตือนเมื่อมีผู้เล่นออกจากห้อง
+socket.on('user_left', ({ user, socketId }) => {
+  console.log(`ผู้เล่น ${user.name} ออกจากห้อง`);
+  showNotification(`${user.name} ออกจากห้อง`, 'info');
+});
+
+// รับรายชื่อผู้เล่นในห้อง
+socket.on('room_players', ({ roomId, players }) => {
+  console.log('ได้รับ event room_players');
+  console.log('roomId:', roomId);
+  console.log('รายชื่อผู้เล่นในห้อง:', players);
+  updatePlayerList(players);
+  updatePlayerCount(players.length);
+});
+
 // รับรายการประวัติการทำอาหาร
 socket.on('cooked_meals_list', ({ roomId, userId, cookedMeals }) => {
   console.log(`ประวัติการทำอาหาร: ${cookedMeals.length} รายการ`);
   updateCookingHistoryUI(cookedMeals);
 });
+
+// ฟังก์ชันโหลดอาหารที่สุ่มได้
+function loadMyFoods() {
+  console.log('โหลดอาหารที่สุ่มได้...');
+  
+  // ส่งคำขอไปยัง server เพื่อรับอาหารที่สุ่มได้
+  socket.emit('get_my_foods', {
+    roomId: window.roomId,
+    userId: window.user.id
+  });
+  
+  // ส่งคำขอไปยัง server เพื่อรับรายการอาหารทั้งหมดในห้อง
+  socket.emit('get_room_foods', {
+    roomId: window.roomId
+  });
+}
+
+// ฟังก์ชันโหลดรายชื่อผู้เล่น
+function loadPlayerList() {
+  console.log('โหลดรายชื่อผู้เล่น...');
+  console.log('roomId:', window.roomId);
+  console.log('userId:', window.user.id);
+  
+  // ส่งคำขอไปยัง server เพื่อรับรายชื่อผู้เล่นในห้อง
+  socket.emit('get_room_players', {
+    roomId: window.roomId
+  });
+}
+
+// ฟังก์ชันอัปเดตอาหารใน player list
+function updatePlayerFoodsInList(userId, foods) {
+  const playerLi = document.getElementById(`player-li-${userId}`);
+  if (!playerLi) return;
+  
+  // หา element ที่แสดงอาหาร
+  let foodDiv = playerLi.querySelector('.text-xs.text-blue-600');
+  
+  if (foods && foods.length > 0) {
+    if (!foodDiv) {
+      // สร้าง element ใหม่ถ้ายังไม่มี
+      foodDiv = document.createElement('div');
+      foodDiv.className = 'mt-1 text-xs text-blue-600';
+      foodDiv.innerHTML = '<i class="fa-solid fa-utensils mr-1"></i>';
+      playerLi.appendChild(foodDiv);
+    }
+    foodDiv.innerHTML = `<i class="fa-solid fa-utensils mr-1"></i>${foods.join(', ')}`;
+  } else if (foodDiv) {
+    // ลบ element ถ้าไม่มีอาหาร
+    foodDiv.remove();
+  }
+}
+
+// ฟังก์ชันอัปเดตส่วนแสดงอาหารของตัวเอง
+function updateMyFoodsDisplay(foods) {
+  console.log('อัปเดตส่วนแสดงอาหาร:', foods);
+  
+  // อัปเดตข้อมูลใน window.playerFoods
+  if (!window.playerFoods) {
+    window.playerFoods = {};
+  }
+  window.playerFoods[window.user.id] = foods;
+  
+  // อัปเดตส่วนแสดงอาหารในหน้าเว็บ
+  const foodSection = document.querySelector('.bg-white.rounded-2xl.shadow.p-6.mt-6');
+  if (!foodSection) return;
+  
+  const foodGrid = foodSection.querySelector('.grid.grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3');
+  if (!foodGrid) return;
+  
+  if (foods && foods.length > 0) {
+    // กรองเฉพาะอาหารที่มีใน playerFoods
+    const availableMeals = window.mealIngredients ? window.mealIngredients.filter(meal => 
+      foods.includes(meal.meal_name)
+    ) : [];
+    
+    if (availableMeals.length > 0) {
+      const foodHTML = availableMeals.map(meal => `
+        <div class="bg-green-50 rounded-xl p-4 flex flex-col items-center shadow border border-green-100 hover:bg-green-100 transition-colors duration-200">
+          <div class="w-24 h-24 bg-white rounded-xl mb-2 flex items-center justify-center overflow-hidden border border-green-200">
+            ${meal.image_file ? 
+              `<img src="/img/${meal.image_file}" 
+                   alt="${meal.meal_name}" 
+                   class="object-cover w-full h-full" 
+                   loading="lazy"
+                   onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                
+               <!-- Fallback icon if image fails -->
+               <div style="display:none;" class="flex items-center justify-center">
+                 <i class="fa-solid fa-utensils text-green-400 text-2xl"></i>
+               </div>` :
+              `<span class="text-4xl text-green-300">
+                 <i class="fa-solid fa-utensils"></i>
+               </span>`
+            }
+          </div>
+          
+          <div class="font-bold text-xl text-green-800 text-center mb-1">${meal.meal_name}</div>
+          <div class="text-gray-700 text-center mb-2">วัตถุดิบ: ${meal.ingredients}</div>
+          
+          <!-- เพิ่มปุ่มสำหรับทำอาหาร -->
+          <button class="cook-meal-btn cursor-pointer mt-4 bg-green-500 hover:bg-green-600 text-white rounded-lg px-6 py-4 font-semibold transition-colors duration-200" 
+                  data-meal="${meal.meal_name}" 
+                  data-ingredients="${meal.ingredients}">
+            <i class="fa-solid fa-fire mr-1"></i>ทำอาหาร
+          </button>
+          <!-- สถานะการทำอาหาร (จะถูกอัปเดตด้วย JavaScript) -->
+          <div class="cook-status mt-2 text-center hidden">
+            <span class="inline-flex items-center bg-green-100 text-green-800 text-xs font-semibold px-2 py-1 rounded-full">
+              <i class="fa-solid fa-check mr-1"></i>ทำเสร็จแล้ว
+            </span>
+          </div>
+        </div>
+      `).join('');
+      
+      foodGrid.innerHTML = foodHTML;
+    } else {
+      // แสดงข้อความว่าไม่มีอาหารที่ได้รับ
+      foodGrid.innerHTML = `
+        <div class="col-span-full text-center p-8 bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center">
+          <i class="fa-solid fa-utensils text-gray-400 text-4xl mb-4"></i>
+          <p class="text-gray-600 font-semibold">ยังไม่มีอาหารที่ได้รับ</p>
+          <p class="text-gray-500 text-sm mt-2">เล่นเกมเพื่อรับอาหารใหม่</p>
+        </div>
+      `;
+    }
+  } else {
+    // แสดงข้อความว่าไม่มีอาหารที่ได้รับ
+    foodGrid.innerHTML = `
+      <div class="col-span-full text-center p-8 bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center">
+        <i class="fa-solid fa-utensils text-gray-400 text-4xl mb-4"></i>
+        <p class="text-gray-600 font-semibold">ยังไม่มีอาหารที่ได้รับ</p>
+        <p class="text-gray-500 text-sm mt-2">เล่นเกมเพื่อรับอาหารใหม่</p>
+      </div>
+    `;
+  }
+}
+
+// ฟังก์ชันอัปเดตรายชื่อผู้เล่น
+function updatePlayerList(players) {
+  console.log('อัปเดตรายชื่อผู้เล่น:', players);
+  
+  const playerList = document.getElementById('player-list');
+  if (!playerList) {
+    console.error('ไม่พบ element player-list');
+    return;
+  }
+  
+  console.log('พบ element player-list:', playerList);
+  
+  if (players && players.length > 0) {
+    console.log('สร้าง HTML สำหรับผู้เล่น:', players.length, 'คน');
+    
+    const playerHTML = players.map(player => {
+      const isOwner = player.is_owner === 1;
+      const playerFoods = window.playerFoods && window.playerFoods[player.id] ? window.playerFoods[player.id] : [];
+      
+      const html = `
+        <li class="mb-1 ${isOwner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}">
+          <i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> 
+          <span class="text-xs text-gray-400">${isOwner ? '(เจ้าของห้อง)' : ''}</span> 
+          <span class="ml-2 text-green-600 font-bold">+${player.score}</span>
+          ${playerFoods.length > 0 ? `
+            <div class="mt-1 text-xs text-blue-600">
+              <i class="fa-solid fa-utensils mr-1"></i>
+              ${playerFoods.join(', ')}
+            </div>
+          ` : ''}
+        </li>
+      `;
+      
+      console.log(`สร้าง HTML สำหรับผู้เล่น ${player.name}:`, html);
+      return html;
+    }).join('');
+    
+    console.log('HTML ทั้งหมด:', playerHTML);
+    playerList.innerHTML = playerHTML;
+    console.log('อัปเดต playerList.innerHTML เรียบร้อย');
+  } else {
+    console.log('ไม่มีผู้เล่นในห้อง');
+    playerList.innerHTML = '<li class="text-gray-500 italic">ไม่มีผู้เล่นในห้อง</li>';
+  }
+}
+
+// ฟังก์ชันอัปเดตจำนวนผู้เล่น
+function updatePlayerCount(count) {
+  console.log('อัปเดตจำนวนผู้เล่น:', count);
+  
+  const playerCountEl = document.getElementById('player-count');
+  if (playerCountEl) {
+    playerCountEl.textContent = count;
+  }
+}
 
 // ฟังก์ชันอัปเดต UI ประวัติการทำอาหาร
 function updateCookingHistoryUI(cookedMeals) {
@@ -2242,6 +2501,12 @@ document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM loaded, initial game state:', gameState);
   console.log('Questions loaded:', questions ? questions.length : 0);
 
+  // โหลดอาหารที่สุ่มได้ทันทีเมื่อเข้าห้อง
+  loadMyFoods();
+
+  // โหลดรายชื่อผู้เล่นทันทีเมื่อเข้าห้อง
+  loadPlayerList();
+
   // อัปเดต currentQuestion จากสถานะเกมเริ่มต้น
   if (gameState && gameState.currentQuestion !== undefined) {
     currentQuestion = gameState.currentQuestion;
@@ -2362,7 +2627,7 @@ document.addEventListener('DOMContentLoaded', () => {
           // socket.disconnect();
 
           // เปลี่ยนหน้าไปยังหน้าหลัก (ปรับ URL ตามที่ต้องการ)
-          window.location.href = '/dashboard'; // หรือ URL ที่ต้องการ
+          window.location.href = '/quiz'; // หรือ URL ที่ต้องการ
         }
       });
     });

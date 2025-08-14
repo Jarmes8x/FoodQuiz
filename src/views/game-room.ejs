@@ -31,6 +31,8 @@
   window.initialPlayerIngredients = <%- JSON.stringify(currentPlayerIngredients) %>;
   // @ts-ignore
   window.ingredients = <%- JSON.stringify(ingredients || []) %>;
+  // @ts-ignore
+  window.mealIngredients = <%- JSON.stringify(mealIngredients || []) %>;
   <% if (typeof gameState !== 'undefined' && gameState) { %>
   // @ts-ignore
   window.initialGameState = <%- JSON.stringify(gameState) %>;

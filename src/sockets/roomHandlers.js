@@ -254,6 +254,29 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+  // เมื่อต้องการดึงรายชื่อผู้เล่นในห้อง
+  socket.on('get_room_players', async ({ roomId }) => {
+    try {
+      console.log(`Getting room players for room ${roomId}...`);
+      
+      const players = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, players) => {
+            if (err) reject(err);
+            else resolve(players || []);
+          });
+        });
+      });
+
+      console.log(`Found ${players.length} players in room ${roomId}:`, players);
+      socket.emit('room_players', { roomId, players });
+      console.log(`Sent room_players event to client for room ${roomId}`);
+    } catch (error) {
+      console.error('Error getting room players:', error);
+      socket.emit('error', { message: 'เกิดข้อผิดพลาดในการดึงรายชื่อผู้เล่น' });
+    }
+  });
+
   // เมื่อเริ่มเกม (หลังจากเลือกคำถามแล้ว)
   socket.on('start_game', async (roomId, ownerId) => {
     try {

@@ -6,7 +6,8 @@ const AVAILABLE_FOODS = [
 ];
 
 const generateRandomFoods = () => {
-  const numFoods = Math.floor(Math.random() * 2) + 2;
+  // const numFoods = Math.floor(Math.random() * 2) + 2;
+  const numFoods = 3;
   const shuffled = [...AVAILABLE_FOODS].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, numFoods);
 };
