@@ -3279,15 +3279,13 @@ document.addEventListener('DOMContentLoaded', () => {
             userId: user.id
           });
           
-          // ตัดการเชื่อมต่อ socket หรือไม่ก็ได้ ขึ้นกับ logic ของคุณ
-          // socket.disconnect();
 
           // เปลี่ยนหน้าไปยังหน้าหลัก (ปรับ URL ตามที่ต้องการ)
           window.location.href = '/quiz'; // หรือ URL ที่ต้องการ
         }
       });
     });
-  }
+  }ไ
 });
 
 // ฟังก์ชันปิดการควบคุมเกมเมื่อเกมจบแล้ว

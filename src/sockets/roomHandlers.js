@@ -251,23 +251,70 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
+  // ในส่วนของ Listener สำหรับ 'leave_room' event
+socket.on('leave_room', ({ roomId, userId }) => {
+    try {
+        console.log(`User ${userId} is leaving room ${roomId}`);
+
+        // สร้าง Promise สำหรับการลบผู้ใช้จากฐานข้อมูล
+        new Promise((resolve, reject) => {
+            // SQL statement สำหรับการลบข้อมูล
+            const sql = 'DELETE FROM room_players WHERE room_id = ? AND user_id = ?';
+            
+            usersDB.run(sql, [roomId, userId], function(err) {
+                if (err) {
+                    console.error('Error deleting player from DB:', err);
+                    reject(err);
+                } else {
+                    console.log(`Deleted player with user_id ${userId} from room ${roomId}. Rows affected: ${this.changes}`);
+                    resolve({ changes: this.changes });
+                }
+            });
+        })
+        .then(() => {
+            // เมื่อลบจากฐานข้อมูลสำเร็จ
+            // หลังจากนั้นค่อยทำการลบออกจาก state ของห้อง (in-memory state)
+            const room = rooms[roomId];
+            if (room) {
+                room.players = room.players.filter(p => p.id !== userId);
+                io.to(roomId).emit('player_left', { userId });
+                console.log(`Player ${userId} removed from in-memory room state.`);
+
+                // หากห้องไม่มีผู้เล่นเหลืออยู่แล้ว ให้ลบห้องนั้นทิ้ง
+                if (room.players.length === 0) {
+                    delete rooms[roomId];
+                    console.log(`Room ${roomId} deleted as it is empty.`);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Failed to handle leave_room event:', error);
+            // สามารถเพิ่มการจัดการ error ที่เหมาะสม เช่น การส่งข้อความแจ้งเตือนกลับไปที่ client
+        });
+
+    } catch (error) {
+        console.error('Error in leave_room event handler:', error);
+    }
+});
 
 
   // เมื่อผู้เล่น disconnect
-  socket.on('disconnect', async () => {
-    try {
-      const rooms = Array.from(socket.rooms);
-
-      for (const room of rooms) {
-        if (room.startsWith('room_')) {
-          const roomId = room.replace('room_', '');
-          await updatePlayerList(io, roomId);
-        }
+socket.on('disconnect', async () => {
+  try {
+    const rooms = [];
+    for (const [room, socketsSet] of io.sockets.adapter.rooms) {
+      if (room.startsWith('room_') && socketsSet.has(socket.id)) {
+        rooms.push(room);
       }
-    } catch (error) {
-      console.error('Error in disconnect:', error);
     }
-  });
+    for (const room of rooms) {
+      const roomId = room.replace('room_', '');
+      await updatePlayerList(io, roomId);
+    }
+  } catch (error) {
+    console.error('Error in disconnect:', error);
+  }
+});
 
   // เมื่อต้องการดึงรายชื่อผู้เล่นในห้อง
   socket.on('get_room_players', async ({ roomId }) => {
