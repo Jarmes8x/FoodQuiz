@@ -297,19 +297,30 @@ socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredie
   // โหลดประวัติการทำอาหารใหม่
   loadCookingHistory();
 
-  // แสดงข้อความแจ้งเตือน
+  // แสดง modal ทำอาหารสำเร็จ
   Swal.fire({
-    title: 'ทำอาหารสำเร็จ!',
-    text: `ใช้ ${usedIngredients.join(', ')} ในการทำ ${mealName}`,
+    title: '<div class="flex items-center gap-3"><i class="fa-solid fa-utensils text-green-600 text-3xl"></i><span class="text-2xl font-bold text-green-800">ทำอาหารสำเร็จ!</span></div>',
+    html: `
+      <div class="text-center">
+        <div class="mb-4">
+          <div class="text-4xl mb-2">🍽️</div>
+          <div class="text-xl font-semibold text-gray-800 mb-2">${mealName}</div>
+          <div class="text-sm text-gray-600">ใช้วัตถุดิบ: ${usedIngredients.join(', ')}</div>
+        </div>
+        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div class="text-green-700 font-medium">🎉 ยินดีด้วย! คุณทำอาหารสำเร็จแล้ว</div>
+        </div>
+      </div>
+    `,
     icon: 'success',
-    toast: true,
-    position: 'top-end',
-    showConfirmButton: false,
-    timer: 3000,
-    timerProgressBar: true,
-    background: '#fff',
+    confirmButtonText: 'เยี่ยม!',
+    confirmButtonColor: '#10b981',
+    showCancelButton: false,
+    allowOutsideClick: false,
     customClass: {
-      popup: 'rounded-lg shadow-lg'
+      popup: 'rounded-2xl shadow-2xl',
+      title: 'text-lg sm:text-xl font-bold text-gray-800',
+      confirmButton: 'px-6 py-2 text-lg font-semibold'
     }
   });
 });
@@ -812,7 +823,7 @@ socket.on('game_reset', ({ message, resetBy }) => {
   
   // แสดงข้อความแจ้งเตือน
   Swal.fire({
-    title: 'เกมถูกรีเซ็ตแล้ว',
+    title: 'เกมจบแล้ว',
     text: message,
     icon: 'info',
     confirmButtonText: 'ตกลง',
@@ -824,9 +835,42 @@ socket.on('game_reset', ({ message, resetBy }) => {
 socket.on('game_auto_reset', ({ message }) => {
   console.log('Game auto reset received:', message);
   
+  // รีเซ็ตเฉพาะสถานะเกมและคำถาม (ไม่รีเซ็ตคะแนน วัตถุดิบ และอาหาร)
+  gameState = {
+    currentQuestion: 0,
+    answeredQuestions: [],
+    gameStarted: false,
+    gameFinished: false
+  };
+  
+  // รีเซ็ตตัวแปรเกม
+  currentQuestion = 0;
+  answered = false;
+  selectedAnswerIdx = null;
+  questions = [];
+  
+  // ไม่รีเซ็ตวัตถุดิบและอาหาร (เก็บไว้)
+  console.log('Keeping ingredients and cooked meals unchanged in auto reset');
+  
+  // ไม่อัปเดต UI (เก็บวัตถุดิบและอาหารไว้)
+  // updateMyIngredients([]);
+  // updatePlayerIngredientsInList(user.id, []);
+  
+  // แสดงปุ่มเริ่มเกมสำหรับเจ้าของห้อง
+  if (isOwner) {
+    const startBtn = document.getElementById('start-btn');
+    if (startBtn) {
+      startBtn.classList.remove('hidden');
+    }
+    const resetBtn = document.getElementById('reset-game-btn');
+    if (resetBtn) {
+      resetBtn.classList.add('hidden');
+    }
+  }
+  
   // แสดงข้อความแจ้งเตือน
   Swal.fire({
-    title: 'เกมถูกรีเซ็ตอัตโนมัติแล้ว',
+    title: 'เกมจบแล้ว',
     text: message,
     icon: 'success',
     confirmButtonText: 'ตกลง',
@@ -988,14 +1032,28 @@ function showPurchaseSuccessMessage(ingredientName, price) {
 
 function showCookingSuccessAnimation(mealName) {
   Swal.fire({
-    title: 'ทำอาหารสำเร็จ!',
-    text: `${mealName} 🍽️`,
+    title: '<div class="flex items-center gap-3"><i class="fa-solid fa-utensils text-green-600 text-3xl"></i><span class="text-2xl font-bold text-green-800">ทำอาหารสำเร็จ!</span></div>',
+    html: `
+      <div class="text-center">
+        <div class="mb-4">
+          <div class="text-4xl mb-2">🍽️</div>
+          <div class="text-xl font-semibold text-gray-800 mb-2">${mealName}</div>
+        </div>
+        <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+          <div class="text-green-700 font-medium">🎉 ยินดีด้วย! คุณทำอาหารสำเร็จแล้ว</div>
+        </div>
+      </div>
+    `,
     icon: 'success',
     confirmButtonText: 'เยี่ยม!',
     confirmButtonColor: '#10b981',
-    timer: 2000,
-    timerProgressBar: true,
-    background: '#fff'
+    showCancelButton: false,
+    allowOutsideClick: false,
+    customClass: {
+      popup: 'rounded-2xl shadow-2xl',
+      title: 'text-lg sm:text-xl font-bold text-gray-800',
+      confirmButton: 'px-6 py-2 text-lg font-semibold'
+    }
   });
 }
 
@@ -1021,40 +1079,127 @@ function showQuestion() {
 
   const gameArea = document.getElementById('game-area');
 
-  // สร้างปุ่มตัวเลือก
-  let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
-    let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
-    if (selectedAnswerIdx !== null && selectedAnswerIdx == i) btnClass += ' ring-4 ring-green-400';
-    return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${c}</button>`;
+  // สร้างปุ่มตัวเลือกแบบสุ่มตำแหน่ง
+  const choices = [q.choice1, q.choice2, q.choice3, q.choice4];
+  const correctAnswer = choices[q.answer_index - 1]; // คำตอบที่ถูกต้อง
+  
+  // สร้าง array ของตัวเลือกพร้อม index เดิม
+  const choicesWithIndex = choices.map((choice, index) => ({
+    text: choice,
+    originalIndex: index,
+    isCorrect: index === q.answer_index - 1
+  }));
+  
+  // สุ่มตำแหน่งตัวเลือก
+  const shuffledChoices = choicesWithIndex.sort(() => Math.random() - 0.5);
+  
+  // สร้าง mapping ระหว่างตำแหน่งใหม่กับตำแหน่งเดิม
+  const choiceMapping = {};
+  shuffledChoices.forEach((choice, newIndex) => {
+    choiceMapping[newIndex] = choice.originalIndex;
+  });
+  
+  // เก็บ mapping ไว้ในตัวแปร global เพื่อใช้ตอนส่งคำตอบ
+  window.currentChoiceMapping = choiceMapping;
+  
+  let choicesHtml = shuffledChoices.map((choice, i) => {
+    let btnClass = 'choice-btn w-full text-left font-semibold py-4 px-6 rounded-xl border-2 transition-all duration-200 transform hover:scale-105 hover:shadow-lg';
+    
+    if (selectedAnswerIdx !== null && selectedAnswerIdx == i) {
+      btnClass += ' bg-gradient-to-r from-green-100 to-emerald-100 border-green-400 text-green-800 ring-4 ring-green-300 shadow-lg';
+    } else {
+      btnClass += ' bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 text-purple-800 hover:from-purple-100 hover:to-indigo-100 hover:border-purple-300';
+    }
+    
+    const optionLetter = String.fromCharCode(65 + i); // A, B, C, D
+    return `
+      <button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>
+        <div class="flex items-center gap-3">
+          <div class="bg-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm border-2 border-current">
+            ${optionLetter}
+          </div>
+          <span class="text-lg">${choice.text}</span>
+        </div>
+      </button>
+    `;
   }).join('');
 
   // เพิ่มปุ่มสำหรับเจ้าของห้องไปข้อถัดไป
   let ownerControlsHtml = '';
   if (isOwner) {
     ownerControlsHtml = `
-      <div class="mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+      <div class="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-6 shadow-lg border-2 border-amber-200">
         <div class="text-center">
-          <div class="text-yellow-800 font-semibold mb-2">🔧 ควบคุมเกม (เจ้าของห้อง)</div>
-          <button id="force-next-question" class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold px-4 py-2 rounded-lg shadow-md transition-all duration-200">
+          <div class="flex items-center justify-center gap-2 mb-4">
+            <span class="text-amber-600 text-xl">🔧</span>
+            <span class="text-amber-800 font-bold text-lg">ควบคุมเกม (เจ้าของห้อง)</span>
+          </div>
+          <button id="force-next-question" class="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg transition-all duration-200 transform hover:scale-105">
             <i class="fa-solid fa-forward mr-2"></i>ไปข้อถัดไป
           </button>
-          <div class="text-xs text-yellow-700 mt-1">กดเพื่อข้ามไปข้อถัดไปทันที</div>
+          <div class="text-sm text-amber-700 mt-3 font-medium">กดเพื่อข้ามไปข้อถัดไปทันที</div>
         </div>
       </div>
     `;
   }
 
   gameArea.innerHTML = `
-      <div class="mb-4">
-        <div class="text-xl font-bold mb-2">ข้อที่ ${currentQuestion + 1}: ${q.question_text}</div>
-        <div class="text-gray-500 mb-2">คำใบ้: ${q.hint || '-'} </div>
-        <div class="text-lg text-red-600 font-bold mb-2">เวลาที่เหลือ: <span id='question-timer'>${timeLeft}</span> วินาที</div>
-        <div id="waiting-answers" class="text-blue-600 font-semibold mb-2 hidden">รอผู้เล่นอื่นตอบ...</div>
+      <!-- หัวข้อคำถาม -->
+      <div class="bg-gradient-to-r from-blue-50 to-purple-50 rounded-2xl p-6 shadow-lg border-2 border-blue-200 mb-6">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="bg-gradient-to-r from-blue-500 to-purple-600 text-white font-bold px-4 py-2 rounded-full text-lg">
+            ข้อที่ ${currentQuestion + 1}
+          </div>
+          <div class="text-sm text-gray-600">จาก ${questions ? questions.length : 14} ข้อ</div>
+        </div>
+        <div class="text-xl font-bold text-gray-800 mb-3 leading-relaxed">${q.question_text}</div>
+        
+        <!-- คำใบ้ -->
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-yellow-600">💡</span>
+            <span class="text-yellow-800 font-medium">คำใบ้:</span>
+            <span class="text-yellow-700">${q.hint || 'ไม่มีคำใบ้'}</span>
+          </div>
+        </div>
+        
+        <!-- ตัวจับเวลา -->
+        <div class="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-red-600">⏰</span>
+              <span class="text-red-800 font-bold">เวลาที่เหลือ:</span>
+            </div>
+            <div class="text-2xl font-bold text-red-600" id='question-timer'>${timeLeft}</div>
+          </div>
+        </div>
+        
+        <!-- ข้อความรอผู้เล่นอื่น -->
+        <div id="waiting-answers" class="bg-blue-50 border border-blue-200 rounded-lg p-3 hidden">
+          <div class="flex items-center gap-2">
+            <span class="text-blue-600">👥</span>
+            <span class="text-blue-800 font-medium">รอผู้เล่นอื่นตอบ...</span>
+          </div>
+        </div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        ${choicesHtml}
+
+      <!-- ตัวเลือกคำตอบ -->
+      <div class="bg-white rounded-2xl p-6 shadow-lg border-2 border-gray-200 mb-6">
+        <div class="text-lg font-bold text-gray-800 mb-4 text-center">เลือกคำตอบที่ถูกต้อง</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          ${choicesHtml}
+        </div>
       </div>
-      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
+
+      <!-- ข้อความแนะนำ -->
+      <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-4 border-2 border-green-200 mb-4">
+        <div class="flex items-center gap-2 text-green-800">
+          <span>💡</span>
+          <span class="font-medium">เคล็ดลับ:</span>
+          <span class="text-sm">ตอบไวได้คะแนนเต็ม ตอบช้าคะแนนลดลง</span>
+        </div>
+      </div>
+
       ${ownerControlsHtml}
     `;
 
@@ -2043,11 +2188,33 @@ function showQuestion() {
 
   const gameArea = document.getElementById('game-area');
 
-  // สร้างปุ่มตัวเลือก
-  let choicesHtml = [q.choice1, q.choice2, q.choice3, q.choice4].map((c, i) => {
+  // สร้างปุ่มตัวเลือกแบบสุ่มตำแหน่ง
+  const choices = [q.choice1, q.choice2, q.choice3, q.choice4];
+  const correctAnswer = choices[q.answer_index - 1]; // คำตอบที่ถูกต้อง
+  
+  // สร้าง array ของตัวเลือกพร้อม index เดิม
+  const choicesWithIndex = choices.map((choice, index) => ({
+    text: choice,
+    originalIndex: index,
+    isCorrect: index === q.answer_index - 1
+  }));
+  
+  // สุ่มตำแหน่งตัวเลือก
+  const shuffledChoices = choicesWithIndex.sort(() => Math.random() - 0.5);
+  
+  // สร้าง mapping ระหว่างตำแหน่งใหม่กับตำแหน่งเดิม
+  const choiceMapping = {};
+  shuffledChoices.forEach((choice, newIndex) => {
+    choiceMapping[newIndex] = choice.originalIndex;
+  });
+  
+  // เก็บ mapping ไว้ในตัวแปร global เพื่อใช้ตอนส่งคำตอบ
+  window.currentChoiceMapping = choiceMapping;
+  
+  let choicesHtml = shuffledChoices.map((choice, i) => {
     let btnClass = 'choice-btn bg-purple-100 hover:bg-purple-300 text-purple-800 font-bold py-3 rounded-xl';
     if (selectedAnswerIdx !== null && selectedAnswerIdx == i) btnClass += ' ring-4 ring-green-400';
-    return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${c}</button>`;
+    return `<button class='${btnClass}' data-idx='${i}' ${selectedAnswerIdx !== null ? 'disabled' : ''}>${choice.text}</button>`;
   }).join('');
 
   gameArea.innerHTML = `
@@ -2060,7 +2227,7 @@ function showQuestion() {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         ${choicesHtml}
       </div>
-      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเยอะ ตอบช้าคะแนนลดลง</div>
+      <div class="mt-4 text-gray-400 text-sm">* ตอบไวได้คะแนนเต็ม ตอบช้าคะแนนลดลง</div>
     `;
 
   // ล้าง fallback timeout ก่อนหน้าและเริ่มใหม่
@@ -2147,18 +2314,40 @@ function showQuestion() {
   // Event handlers สำหรับปุ่มตัวเลือก
   document.querySelectorAll('.choice-btn').forEach(btn => {
     btn.onclick = () => {
-      if (answered || selectedAnswerIdx !== null || questionEnded) return;
+      // ป้องกันการเรียกซ้ำ
+      if (answered || selectedAnswerIdx !== null || questionEnded) {
+        console.log('Answer already submitted or question ended, ignoring click');
+        return;
+      }
 
+      // ตั้งค่าสถานะทันทีเพื่อป้องกันการเรียกซ้ำ
       answered = true;
+      selectedAnswerIdx = parseInt(btn.getAttribute('data-idx'));
+      
+      console.log('User selected answer:', {
+        selectedAnswerIdx: selectedAnswerIdx,
+        buttonText: btn.textContent,
+        currentQuestion: currentQuestion
+      });
+
       clearInterval(currentQuestionTimer); // หยุดจับเวลา
       currentQuestionTimer = null;
 
-      selectedAnswerIdx = parseInt(btn.getAttribute('data-idx'));
       const answerTime = Date.now() - startTime;
+
+      // แปลง index ใหม่เป็น index เดิมโดยใช้ mapping
+      const originalAnswerIndex = window.currentChoiceMapping ? window.currentChoiceMapping[selectedAnswerIdx] : selectedAnswerIdx;
+
+      console.log('Answer mapping:', {
+        selectedAnswerIdx: selectedAnswerIdx,
+        originalAnswerIndex: originalAnswerIndex,
+        choiceMapping: window.currentChoiceMapping
+      });
 
       // บันทึกคำตอบในสถานะเกม
       gameState.answeredQuestions[currentQuestion] = {
-        answerIndex: selectedAnswerIdx,
+        answerIndex: originalAnswerIndex,
+        selectedAnswerIdx: selectedAnswerIdx, // เก็บตำแหน่งที่สุ่มไว้
         answerTime: answerTime,
         isCorrect: false, // จะถูกอัปเดตจาก backend
         scoreGained: 0 // จะถูกอัปเดตจาก backend
@@ -2167,7 +2356,7 @@ function showQuestion() {
       socket.emit('submit_answer', {
         roomId,
         userId: user.id,
-        answerIndex: selectedAnswerIdx,
+        answerIndex: originalAnswerIndex,
         answerTime,
         questionIndex: currentQuestion,
         currentQuestion: questions[currentQuestion]
@@ -2291,7 +2480,14 @@ socket.on('user_answered', data => {
 
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
   if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
-    selectedAnswerIdx = parseInt(data.answerIndex);
+    // อย่าเปลี่ยน selectedAnswerIdx เพราะ data.answerIndex เป็น originalAnswerIndex
+    // ใช้ selectedAnswerIdx ที่มีอยู่แล้วจากสถานะเกม
+    
+    console.log('User answered event received:', {
+      originalAnswerIndex: data.answerIndex,
+      currentSelectedAnswerIdx: selectedAnswerIdx,
+      questionIndex: data.questionIndex
+    });
 
     // อัปเดตสถานะเกมด้วยข้อมูลจาก backend
     if (gameState.answeredQuestions[data.questionIndex]) {
@@ -2299,7 +2495,7 @@ socket.on('user_answered', data => {
       gameState.answeredQuestions[data.questionIndex].scoreGained = data.scoreGained;
     }
 
-    // อัปเดตปุ่มให้ active
+    // อัปเดตปุ่มให้ active (ใช้ selectedAnswerIdx ที่มีอยู่แล้ว)
     document.querySelectorAll('.choice-btn').forEach((b, idx) => {
       if (idx === selectedAnswerIdx) {
         b.classList.add('ring-4', 'ring-green-400');
@@ -2328,7 +2524,43 @@ function showAnswer() {
 
   const gameArea = document.getElementById('game-area');
   const correctAnswer = [q.choice1, q.choice2, q.choice3, q.choice4][q.answer_index - 1];
-  const correctIndex = q.answer_index - 1;
+  
+  // หาตำแหน่งที่ถูกต้องในหน้าจอปัจจุบัน (หลังจากสุ่มแล้ว)
+  let displayedCorrectIndex = 0;
+  if (window.currentChoiceMapping) {
+    for (let newIndex in window.currentChoiceMapping) {
+      if (window.currentChoiceMapping[newIndex] === q.answer_index - 1) {
+        displayedCorrectIndex = parseInt(newIndex);
+        break;
+      }
+    }
+  }
+
+  // ดึงข้อมูลคำตอบที่เลือกจากสถานะเกม
+  const answeredQuestion = gameState.answeredQuestions[currentQuestion];
+  const userSelectedAnswerIdx = answeredQuestion ? answeredQuestion.selectedAnswerIdx : selectedAnswerIdx;
+
+  // สร้างตัวเลือกในตำแหน่งที่สุ่มเหมือนตอนแสดงคำถาม
+  const choices = [q.choice1, q.choice2, q.choice3, q.choice4];
+  const choicesWithIndex = choices.map((choice, index) => ({
+    text: choice,
+    originalIndex: index,
+    isCorrect: index === q.answer_index - 1
+  }));
+  
+  // ใช้ mapping เดียวกับตอนแสดงคำถาม
+  let shuffledChoices = choicesWithIndex;
+  if (window.currentChoiceMapping) {
+    // สร้าง array ใหม่ตาม mapping
+    shuffledChoices = new Array(4);
+    for (let newIndex in window.currentChoiceMapping) {
+      const originalIndex = window.currentChoiceMapping[newIndex];
+      shuffledChoices[parseInt(newIndex)] = choicesWithIndex[originalIndex];
+    }
+  }
+
+  // ตรวจสอบว่าผู้เล่นตอบถูกหรือไม่
+  const isCorrect = userSelectedAnswerIdx === displayedCorrectIndex;
 
   // แสดงเฉลยและผลลัพธ์
   gameArea.innerHTML += `
@@ -2339,26 +2571,26 @@ function showAnswer() {
       </div>
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-        ${[q.choice1, q.choice2, q.choice3, q.choice4].map((choice, idx) => {
+        ${shuffledChoices.map((choice, idx) => {
     let choiceClass = 'p-3 rounded-lg border-2 font-semibold';
-    if (idx === correctIndex) {
+    if (idx === displayedCorrectIndex) {
       choiceClass += ' bg-green-200 border-green-500 text-green-800';
-    } else if (idx === selectedAnswerIdx) {
+    } else if (idx === userSelectedAnswerIdx && idx !== displayedCorrectIndex) {
       choiceClass += ' bg-red-200 border-red-500 text-red-800';
     } else {
       choiceClass += ' bg-gray-100 border-gray-300 text-gray-600';
     }
 
     let icon = '';
-    if (idx === correctIndex) {
+    if (idx === displayedCorrectIndex) {
       icon = '✅';
-    } else if (idx === selectedAnswerIdx && idx !== correctIndex) {
+    } else if (idx === userSelectedAnswerIdx && idx !== displayedCorrectIndex) {
       icon = '❌';
     }
 
     return `
             <div class="${choiceClass}">
-              ${icon} ${choice}
+              ${icon} ${choice.text}
             </div>
           `;
   }).join('')}
@@ -2366,9 +2598,9 @@ function showAnswer() {
       
       <div class="mt-4 text-center">
         <div class="text-gray-600 text-sm">
-          ${selectedAnswerIdx === correctIndex ?
+          ${isCorrect ?
       '🎉 ยินดีด้วย! คุณตอบถูก!' :
-      selectedAnswerIdx !== null ?
+      userSelectedAnswerIdx !== null ?
         '😔 ไม่เป็นไร ลองข้อถัดไปดู!' :
         '⏰ เวลาหมดแล้ว!'
     }
@@ -2387,7 +2619,7 @@ function showSummary() {
   gameState.currentQuestion = questions ? questions.length : 14; // ตั้งค่าเป็นจำนวนคำถามทั้งหมด
   saveGameState();
   
-  // รีเซ็ตข้อมูลอัตโนมัติหลังจบเกม
+  // รีเซ็ตเฉพาะคำถามและสถานะเกม (ไม่รีเซ็ตคะแนน วัตถุดิบ และอาหาร)
   setTimeout(() => {
     // รีเซ็ตสถานะเกม
     gameState = {
@@ -2403,16 +2635,12 @@ function showSummary() {
     selectedAnswerIdx = null;
     questions = [];
     
-    // รีเซ็ตคะแนนและวัตถุดิบ
-    currentPlayerScore = 0;
-    myPoints = 0;
-    playerIngredients = [];
-    myIngredients = [];
+    // ไม่รีเซ็ตคะแนน วัตถุดิบ และอาหาร (เก็บไว้ทุกอย่าง)
+    console.log('Keeping player score, ingredients, and cooked meals unchanged');
     
-    // อัปเดต UI
-    updateMyScore(0);
-    updateMyIngredients([]);
-    updatePlayerIngredientsInList(user.id, []);
+    // ไม่อัปเดต UI (เก็บวัตถุดิบและอาหารไว้)
+    // updateMyIngredients([]);
+    // updatePlayerIngredientsInList(user.id, []);
     
     // แสดงปุ่มเริ่มเกมสำหรับเจ้าของห้อง
     if (isOwner) {
@@ -2448,10 +2676,42 @@ function showSummary() {
   // จัดอันดับ
   players.sort((a, b) => b.score - a.score);
 
+  // คำนวณสถิติเกม
+  const totalQuestions = questions ? questions.length : 14;
+  const totalPlayers = players.length;
+  const highestScore = players.length > 0 ? players[0].score : 0;
+  const averageScore = players.length > 0 ? Math.round(players.reduce((sum, p) => sum + p.score, 0) / players.length) : 0;
+
   let html = `
     <div class="text-center">
-      <div class="text-4xl font-bold mb-8 text-purple-700">🏆 สรุปผลคะแนน 🏆</div>
+      <div class="text-4xl font-bold mb-8 text-purple-700">🏆 สรุปผลการเล่น 🏆</div>
+      
+      <!-- สถิติเกม -->
+      <div class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-3xl p-6 shadow-xl border-2 border-green-200 mb-6">
+        <div class="text-2xl font-bold text-green-800 mb-4">📊 สถิติการเล่น</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-white rounded-xl p-4 shadow-md">
+            <div class="text-3xl font-bold text-blue-600">${totalQuestions}</div>
+            <div class="text-gray-600 text-sm">คำถามทั้งหมด</div>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-md">
+            <div class="text-3xl font-bold text-purple-600">${totalPlayers}</div>
+            <div class="text-gray-600 text-sm">ผู้เล่น</div>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-md">
+            <div class="text-3xl font-bold text-green-600">${highestScore}</div>
+            <div class="text-gray-600 text-sm">คะแนนสูงสุด</div>
+          </div>
+          <div class="bg-white rounded-xl p-4 shadow-md">
+            <div class="text-3xl font-bold text-orange-600">${averageScore}</div>
+            <div class="text-gray-600 text-sm">คะแนนเฉลี่ย</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- อันดับคะแนน -->
       <div class="bg-gradient-to-br from-purple-50 to-blue-50 rounded-3xl p-8 shadow-xl border-2 border-purple-200">
+        <div class="text-2xl font-bold text-purple-800 mb-6">🏅 อันดับคะแนน</div>
         <div class="grid gap-4">
   `;
 
@@ -2482,9 +2742,25 @@ function showSummary() {
   html += `
         </div>
       </div>
+
+      <!-- ข้อความยินดี -->
+      <div class="bg-gradient-to-br from-yellow-50 to-amber-50 rounded-3xl p-6 shadow-xl border-2 border-yellow-200 mt-6">
+        <div class="text-2xl font-bold text-yellow-800 mb-2">🎉 ขอบคุณที่เล่น!</div>
+        <div class="text-gray-700">
+          ${players.length > 1 ? 
+            `ยินดีด้วยกับ <span class="font-bold text-yellow-700">${players[0].name}</span> ที่ได้คะแนนสูงสุด!` : 
+            'ขอบคุณที่เล่นเกมนี้!'
+          }
+        </div>
+        <div class="text-sm text-gray-600 mt-2">
+          เกมจะรีเซ็ตเฉพาะคำถาม คะแนนและวัตถุดิบของคุณยังคงอยู่
+        </div>
+      </div>
+
+      <!-- ปุ่มควบคุม -->
       <div class="mt-8 space-x-4">
-        <button onclick="window.location.reload()" class="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all duration-200">
-          🎮 เล่นใหม่
+        <button onclick="window.location.reload()" class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all duration-200">
+          🎮 เล่นต่อ
         </button>
         <button onclick="window.location.href='/dashboard'" class="bg-gradient-to-r from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 text-white font-bold px-8 py-3 rounded-xl shadow-lg transition-all duration-200">
           🏠 กลับหน้าหลัก

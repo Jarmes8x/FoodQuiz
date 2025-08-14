@@ -75,6 +75,7 @@ usersDB.serialize(() => {
       choice4 TEXT NOT NULL,
       answer_index INTEGER NOT NULL, -- 0-3
       hint TEXT,
+      points INTEGER DEFAULT 10, -- คะแนนสำหรับคำถามนี้
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `, (err) => {

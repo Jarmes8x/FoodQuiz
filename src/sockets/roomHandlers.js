@@ -410,22 +410,22 @@ const setupRoomHandlers = (io, socket) => {
             });
 
             if (isCorrect) {
-                // คำนวณคะแนนตามเวลาที่ตอบ (ตอบไวได้คะแนนเยอะ)
+                // ใช้คะแนนจากคำถามแต่ละข้อ
+                const questionPoints = currentQuestionData.points || 10; // ถ้าไม่มีคะแนนให้ใช้ 10 เป็นค่าเริ่มต้น
+                
+                // คำนวณคะแนนที่ลดลงตามเวลา (ตอบไวได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
                 const maxTime = 20000; // 20 วินาที
                 const timeUsed = Math.min(data.answerTime, maxTime);
-                const timeBonus = Math.max(0, maxTime - timeUsed);
                 
-                // คะแนนพื้นฐาน 10 คะแนน + โบนัสตามความเร็ว (สูงสุด 10 คะแนน)
-                const baseScore = 10;
-                const speedBonus = Math.floor((timeBonus / maxTime) * 10);
-                scoreGained = baseScore + speedBonus;
+                // คะแนนลดลงตามสัดส่วนเวลาที่ใช้ (ตอบทันทีได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
+                const timeRatio = timeUsed / maxTime; // 0 = ตอบทันที, 1 = ตอบช้า
+                scoreGained = Math.floor(questionPoints * (1 - timeRatio * 0.5)); // ลดลงสูงสุด 50%
 
                 console.log('Score calculation:', {
+                  questionPoints: questionPoints,
                   timeUsed: timeUsed,
-                  timeBonus: timeBonus,
-                  baseScore: baseScore,
-                  speedBonus: speedBonus,
-                  totalScore: scoreGained
+                  timeRatio: timeRatio,
+                  scoreGained: scoreGained
                 });
             }
         }
@@ -717,9 +717,9 @@ const setupRoomHandlers = (io, socket) => {
 
       console.log(`Game reset for room ${roomId} by owner ${ownerId}`);
 
-      // แจ้งทุกคนในห้องว่าเกมถูกรีเซ็ต
+      // แจ้งทุกคนในห้องว่าเกมจบแล้ว
       io.to(`room_${roomId}`).emit('game_reset', { 
-        message: 'เกมถูกรีเซ็ตแล้ว พร้อมเริ่มเกมใหม่',
+        message: 'เกมจบแล้ว พร้อมเริ่มเกมใหม่',
         resetBy: ownerId
       });
 
@@ -801,7 +801,7 @@ const autoResetGame = async (io, roomId) => {
       });
     });
     
-    // ลบ game_state ของทุกคนในห้อง
+    // ลบ game_state ของทุกคนในห้อง (รีเซ็ตเฉพาะสถานะเกม ไม่รีเซ็ตคะแนน)
     await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
         usersDB.run('DELETE FROM game_state WHERE room_id = ?', [roomId], (err) => {
@@ -811,50 +811,17 @@ const autoResetGame = async (io, roomId) => {
       });
     });
     
-    // รีเซ็ตคะแนนของทุกคนในห้อง
-    await executeWithRetry(async () => {
-      return new Promise((resolve, reject) => {
-        usersDB.run('UPDATE room_players SET score = 0 WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+    // ไม่รีเซ็ตคะแนนของผู้เล่น (เก็บคะแนนไว้)
+    console.log('Keeping player scores unchanged');
     
-    // ลบข้อมูลอาหารที่ทำแล้ว
-    await executeWithRetry(async () => {
-      return new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM cooked_meals WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+    // ไม่ลบข้อมูลอาหารที่ทำแล้วและวัตถุดิบของผู้เล่น (เก็บไว้)
+    console.log('Keeping cooked meals and player ingredients/foods unchanged');
     
-    // ลบข้อมูลวัตถุดิบและอาหารของผู้เล่น
-    await executeWithRetry(async () => {
-      return new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM player_ingredients WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+    console.log(`Auto reset completed for room ${roomId} (questions and game state only)`);
     
-    await executeWithRetry(async () => {
-      return new Promise((resolve, reject) => {
-        usersDB.run('DELETE FROM player_foods WHERE room_id = ?', [roomId], (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
-    
-    console.log(`Auto reset completed for room ${roomId}`);
-    
-    // แจ้งทุกคนในห้องว่าเกมถูกรีเซ็ตอัตโนมัติแล้ว
+    // แจ้งทุกคนในห้องว่าเกมจบแล้ว
     io.to(`room_${roomId}`).emit('game_auto_reset', {
-      message: 'เกมถูกรีเซ็ตอัตโนมัติแล้ว พร้อมเริ่มเกมใหม่'
+      message: 'เกมจบแล้ว (เฉพาะคำถาม) คะแนน วัตถุดิบ และอาหารยังคงอยู่ พร้อมเริ่มเกมใหม่'
     });
     
     await updatePlayerList(io, roomId);
