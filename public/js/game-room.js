@@ -34,10 +34,7 @@ socket.on('room_deleted', function (data) {
 
 // เมื่อห้องเต็ม
 socket.on('room_full', function (data) {
-  showNotification('ห้องเต็มแล้ว', 'info');
-  setTimeout(() => {
-    window.location.href = '/';
-  }, 2000);
+  window.location.href = '/quiz';
 });
 
 // จัดการ error จากเกม

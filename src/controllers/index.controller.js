@@ -202,10 +202,10 @@ exports.createRoomPost = async (req, res) => {
     }
 
     const userId = req.user.id;
-    let { name, is_private, password, room_color } = req.body;
+    let { name, is_private, password, room_color, max_players } = req.body;
 
     // Normalize / validate ข้อมูลเบื้องต้น
-    const max_players = 5;                   // บังคับ 5 คน (ไม่รวม creator)
+    max_players = parseInt(max_players) || 5;  // รับค่าจากฟอร์ม หรือใช้ค่าเริ่มต้น 5
     name = (name || '').trim();
     room_color = room_color || '#FFFFFF';
     const isPrivate = (is_private === true || is_private === '1' || is_private === 'true') ? 1 : 0;
@@ -213,6 +213,16 @@ exports.createRoomPost = async (req, res) => {
     if (!name) {
       return res.render('create-room', {
         error: 'กรุณากรอกชื่อห้อง',
+        room: null,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // ตรวจสอบจำนวนผู้เล่นสูงสุด
+    if (max_players < 2 || max_players > 10) {
+      return res.render('create-room', {
+        error: 'จำนวนผู้เล่นสูงสุดต้องอยู่ระหว่าง 2-10 คน',
         room: null,
         user: req.user,
         layout: 'layouts/main'
@@ -325,6 +335,17 @@ exports.gameRoomPage = async (req, res) => {
 
     // ตรวจสอบว่าห้องจบแล้วหรือไม่ - ให้เข้าร่วมได้แต่จะแสดงผู้ชนะ
     const isGameFinished = room.status === 'finished';
+
+    // ตรวจสอบจำนวนผู้เล่นในห้อง
+    const currentPlayerCount = await dbGet(
+      `SELECT COUNT(*) as count FROM room_players WHERE room_id = ? AND is_online = 1`,
+      [roomId]
+    );
+
+    // ถ้าผู้เล่นไม่ใช่เจ้าของห้องและห้องเต็มแล้ว
+    if (req.user.id !== room.creator_id && currentPlayerCount.count >= room.max_players) {
+      return res.redirect('/quiz?error=room_full');
+    }
 
     // 2) ดึงข้อมูลประกอบทั้งหมดแบบขนาน
     const [
@@ -504,17 +525,28 @@ exports.editRoomPost = async (req, res) => {
     if (!req.user) return res.redirect('/login');
 
     const userId = req.user.id;
-    let { name, is_private, password, room_color } = req.body;
+    let { name, is_private, password, room_color, max_players } = req.body;
 
     // Normalize
     name = (name || '').trim();
     const isPrivate = (is_private === '1' || is_private === 1 || is_private === true || is_private === 'true') ? 1 : 0;
     room_color = room_color || '#FFFFFF';
+    max_players = parseInt(max_players) || 5;
 
     // Validate
     if (!name) {
       return res.render('edit-room', {
         error: 'กรุณากรอกชื่อห้อง',
+        room: null,
+        user: req.user,
+        layout: 'layouts/main'
+      });
+    }
+
+    // ตรวจสอบจำนวนผู้เล่นสูงสุด
+    if (max_players < 2 || max_players > 10) {
+      return res.render('edit-room', {
+        error: 'จำนวนผู้เล่นสูงสุดต้องอยู่ระหว่าง 2-10 คน',
         room: null,
         user: req.user,
         layout: 'layouts/main'
@@ -532,9 +564,9 @@ exports.editRoomPost = async (req, res) => {
     try {
       await dbRun(
         `UPDATE rooms
-         SET name = ?, is_private = ?, password = ?, room_color = ?
+         SET name = ?, is_private = ?, password = ?, room_color = ?, max_players = ?
          WHERE creator_id = ?`,
-        [name, isPrivate, newPassword, room_color, userId]
+        [name, isPrivate, newPassword, room_color, max_players, userId]
       );
     } catch (err) {
       console.error('Room update error:', err);

@@ -39,8 +39,18 @@
             <input type="text" name="name" value="ห้องของ <%= user.name %>" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" required>
           </label>
           <label class="font-medium text-gray-700">จำนวนผู้เล่นสูงสุด
-            <input type="number" name="max_players" class="mt-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition w-full" min="0" max="10" value="5" readonly>
-            <span class="text-xs text-gray-500">* จำกัดผู้เล่น 5 คนต่อห้อง (ไม่รวมผู้สร้างห้อง)</span>
+            <div class="mt-1 flex items-center gap-2">
+              <input type="number" name="max_players" id="max_players_input" class="flex-1 p-3 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-400 transition" min="2" max="10" value="5">
+              <div class="flex flex-col gap-1">
+                <button type="button" onclick="adjustMaxPlayers(1)" class="w-8 h-8 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg border border-purple-300 flex items-center justify-center transition-colors">
+                  <i class="fa-solid fa-plus text-xs"></i>
+                </button>
+                <button type="button" onclick="adjustMaxPlayers(-1)" class="w-8 h-8 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg border border-purple-300 flex items-center justify-center transition-colors">
+                  <i class="fa-solid fa-minus text-xs"></i>
+                </button>
+              </div>
+            </div>
+            <span class="text-xs text-gray-500">* จำนวนผู้เล่นที่สามารถเข้าร่วมได้ (2-10 คน)</span>
           </label>
           <label class="font-medium flex items-center gap-2 text-gray-700">
             <input type="checkbox" name="is_private" value="1" id="is_private_checkbox" class="accent-purple-500"> ห้องส่วนตัว (ไม่บังคับ)
@@ -149,4 +159,12 @@
       passwordLabel.style.display = 'none';
     }
   });
+
+  // ฟังก์ชันปรับจำนวนผู้เล่นสูงสุด
+  function adjustMaxPlayers(change) {
+    const input = document.getElementById('max_players_input');
+    const currentValue = parseInt(input.value) || 5;
+    const newValue = Math.max(2, Math.min(10, currentValue + change));
+    input.value = newValue;
+  }
 </script>

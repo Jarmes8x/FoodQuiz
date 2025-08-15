@@ -109,7 +109,7 @@ const addPlayerToRoom = async (roomId, user) => {
     if (!existingPlayer) {
       const room = await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+          usersDB.get('SELECT creator_id, max_players FROM rooms WHERE id = ?', [roomId], (err, row) => {
             if (err) reject(err);
             else resolve(row);
           });
@@ -121,6 +121,22 @@ const addPlayerToRoom = async (roomId, user) => {
       }
 
       const isOwner = room.creator_id === user.id;
+
+      // ตรวจสอบจำนวนผู้เล่นในห้อง (เฉพาะผู้เล่นใหม่ที่ไม่ใช่เจ้าของห้อง)
+      if (!isOwner) {
+        const currentPlayerCount = await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.get('SELECT COUNT(*) as count FROM room_players WHERE room_id = ? AND is_online = 1', [roomId], (err, row) => {
+              if (err) reject(err);
+              else resolve(row);
+            });
+          });
+        });
+
+        if (currentPlayerCount.count >= room.max_players) {
+          throw new Error('Room is full');
+        }
+      }
 
       // เพิ่มผู้เล่นลงในฐานข้อมูล
       await executeWithRetry(async () => {
@@ -182,75 +198,85 @@ const setupRoomHandlers = (io, socket) => {
       // เก็บ userId ไว้ใน socket เพื่อใช้ตอน disconnect
       socket.userId = user.id;
 
-      const isNewPlayer = await addPlayerToRoom(roomId, user);
+      try {
+        const isNewPlayer = await addPlayerToRoom(roomId, user);
 
-      // สุ่มอาหารให้ผู้เล่นเมื่อเข้าห้อง
-      if (isNewPlayer) {
-        try {
-          const foods = await assignRandomFoodsToPlayer(roomId, user.id);
-          console.log(`Assigned foods to new player ${user.name} in room ${roomId}:`, foods);
-        } catch (foodError) {
-          console.error('Error assigning foods to new player:', foodError);
-        }
-      }
-
-      // ดึงสถานะเกมของผู้เล่น
-      const gameState = await getGameState(roomId, user.id);
-      console.log(`Game state for user ${user.id} in room ${roomId}:`, gameState);
-      socket.emit('game_state_loaded', { gameState });
-
-      // ตรวจสอบสถานะห้องก่อนส่งคำถาม
-      const roomStatus = await executeWithRetry(async () => {
-        return new Promise((resolve, reject) => {
-          usersDB.get('SELECT status FROM rooms WHERE id = ?', [roomId], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          });
-        });
-      });
-      
-      // ถ้าห้องจบแล้ว ไม่ส่งคำถาม
-      if (roomStatus && roomStatus.status === 'finished') {
-        console.log(`Room ${roomId} is finished - not sending questions`);
-      } else {
-        // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
-        if (gameState && gameState.gameStarted) {
-          // ตรวจสอบว่าเกมจบจริงหรือไม่
-          const isGameReallyFinished = gameState.currentQuestion >= 14; // 14 คำถาม
-          if (!isGameReallyFinished) {
-            console.log(`Game is ongoing, current question: ${gameState.currentQuestion}/14`);
-            try {
-              const questions = await executeWithRetry(async () => {
-                return new Promise((resolve, reject) => {
-                  usersDB.all(`
-                    SELECT q.* FROM questions q 
-                    JOIN room_questions rq ON q.id = rq.question_id 
-                    WHERE rq.room_id = ?
-                    ORDER BY rq.id ASC
-                  `, [roomId], (err, rows) => {
-                    if (err) reject(err);
-                    else resolve(rows || []);
-                  });
-                });
-              });
-              
-              if (questions.length > 0) {
-                console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
-                socket.emit('game_questions', questions);
-              }
-            } catch (error) {
-              console.error('Error loading questions for ongoing game:', error);
-            }
-          } else {
-            console.log(`Game is finished, current question: ${gameState.currentQuestion}/14`);
+        // สุ่มอาหารให้ผู้เล่นเมื่อเข้าห้อง
+        if (isNewPlayer) {
+          try {
+            const foods = await assignRandomFoodsToPlayer(roomId, user.id);
+            console.log(`Assigned foods to new player ${user.name} in room ${roomId}:`, foods);
+          } catch (foodError) {
+            console.error('Error assigning foods to new player:', foodError);
           }
         }
+
+        // ดึงสถานะเกมของผู้เล่น
+        const gameState = await getGameState(roomId, user.id);
+        console.log(`Game state for user ${user.id} in room ${roomId}:`, gameState);
+        socket.emit('game_state_loaded', { gameState });
+
+        // ตรวจสอบสถานะห้องก่อนส่งคำถาม
+        const roomStatus = await executeWithRetry(async () => {
+          return new Promise((resolve, reject) => {
+            usersDB.get('SELECT status FROM rooms WHERE id = ?', [roomId], (err, row) => {
+              if (err) reject(err);
+              else resolve(row);
+            });
+          });
+        });
+        
+        // ถ้าห้องจบแล้ว ไม่ส่งคำถาม
+        if (roomStatus && roomStatus.status === 'finished') {
+          console.log(`Room ${roomId} is finished - not sending questions`);
+        } else {
+          // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
+          if (gameState && gameState.gameStarted) {
+            // ตรวจสอบว่าเกมจบจริงหรือไม่
+            const isGameReallyFinished = gameState.currentQuestion >= 14; // 14 คำถาม
+            if (!isGameReallyFinished) {
+              console.log(`Game is ongoing, current question: ${gameState.currentQuestion}/14`);
+              try {
+                const questions = await executeWithRetry(async () => {
+                  return new Promise((resolve, reject) => {
+                    usersDB.all(`
+                      SELECT q.* FROM questions q 
+                      JOIN room_questions rq ON q.id = rq.question_id 
+                      WHERE rq.room_id = ?
+                      ORDER BY rq.id ASC
+                    `, [roomId], (err, rows) => {
+                      if (err) reject(err);
+                      else resolve(rows || []);
+                    });
+                  });
+                });
+                
+                if (questions.length > 0) {
+                  console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
+                  socket.emit('game_questions', questions);
+                }
+              } catch (error) {
+                console.error('Error loading questions for ongoing game:', error);
+              }
+            } else {
+              console.log(`Game is finished, current question: ${gameState.currentQuestion}/14`);
+            }
+          }
+        }
+
+        io.to(`room_${roomId}`).emit('user_joined', { user, socketId: socket.id });
+
+        // อัปเดตรายชื่อผู้เล่น
+        await updatePlayerList(io, roomId);
+
+      } catch (roomError) {
+        if (roomError.message === 'Room is full') {
+          socket.emit('room_full', { message: 'ห้องนี้เต็มแล้ว กรุณารอให้มีคนออกจากห้องก่อน' });
+          socket.leave(`room_${roomId}`);
+          return;
+        }
+        throw roomError;
       }
-
-      io.to(`room_${roomId}`).emit('user_joined', { user, socketId: socket.id });
-
-      // อัปเดตรายชื่อผู้เล่น
-      await updatePlayerList(io, roomId);
 
     } catch (error) {
       console.error('Error in join_room:', error);

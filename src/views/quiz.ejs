@@ -27,13 +27,19 @@
   </div>
 </div>
 
-<!-- Available Rooms Section -->
-<div class="container mx-auto px-4">
-  <% if (error) { %>
-    <div class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium">
-      <%= error %>
+  <!-- Available Rooms Section -->
+  <div class="container mx-auto px-4">
+    <% if (error) { %>
+      <div class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium">
+        <%= error %>
+      </div>
+    <% } %>
+    
+    <!-- Room Full Message -->
+    <div id="room-full-message" class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium" style="display: none;">
+      <i class="fa-solid fa-exclamation-triangle mr-2"></i>
+      ห้องที่คุณพยายามเข้าร่วมเต็มแล้ว กรุณารอให้มีคนออกจากห้องก่อน
     </div>
-  <% } %>
   
   <div class="grid md:grid-cols-2 lg:grid-cols-2 gap-8">
     <% if (rooms && rooms.length > 0) { %>
@@ -64,14 +70,20 @@
                 </p>
                 <p class="text-gray-500 text-sm flex items-center">
                   <span class="w-2 h-2 bg-green-400 rounded-full mr-2"></span>
-                  <span class="player-count font-bold text-blue-700" data-room-id="<%= room.id %>">0</span>/<%= room.max_players %> players
+                  <span class="player-count font-bold text-blue-700" data-room-id="<%= room.id %>" data-max-players="<%= room.max_players %>">0</span>/<%= room.max_players %> players
                 </p>
+                <p class="text-xs text-gray-400 mt-1">
+                  <i class="fa-solid fa-users mr-1"></i>สูงสุด <%= room.max_players %> คน
+                </p>
+                <div class="room-status mt-2" data-room-id="<%= room.id %>">
+                  <!-- สถานะห้องจะถูกอัปเดตด้วย JavaScript -->
+                </div>
               </div>
             </div>
 
             <!-- Join button -->
-            <button class="<%= (room.owner_name == user.name) ? 'bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00]' : 'bg-purple-600 hover:bg-purple-700' %> cursor-pointer w-full text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2" 
-              onclick="window.location.href='/game-room/<%= room.id %>'">
+            <button id="join-btn-<%= room.id %>" class="<%= (room.owner_name == user.name) ? 'bg-gradient-to-r from-[#ff6a6a] to-[#ff8c42] hover:from-[#ff4d4d] hover:to-[#ff6a00] owner-room' : 'bg-purple-600 hover:bg-purple-700' %> cursor-pointer w-full text-white font-bold px-8 py-4 rounded-2xl text-lg transition-all duration-300 ease-out mt-4 shadow-lg flex items-center justify-center gap-2" 
+              onclick="joinRoom('<%= room.id %>', '<%= room.owner_name %>', '<%= user.name %>')">
               <% if (room.owner_name == user.name) { %>
                 <i class="fa-solid fa-play"></i>ดำเนินการห้องต่อ
               <% } else { %>
@@ -98,12 +110,75 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+  // ฟังก์ชันสำหรับเข้าร่วมห้อง
+  function joinRoom(roomId, ownerName, userName) {
+    // ถ้าเป็นเจ้าของห้อง ให้เข้าร่วมได้เลย
+    if (ownerName === userName) {
+      window.location.href = `/game-room/${roomId}`;
+      return;
+    }
+
+    // ตรวจสอบจำนวนผู้เล่นก่อนเข้าร่วม
+    const playerCountEl = document.querySelector(`[data-room-id="${roomId}"]`);
+    const maxPlayers = parseInt(playerCountEl.dataset.maxPlayers);
+    const currentCount = parseInt(playerCountEl.textContent);
+
+    if (currentCount >= maxPlayers) {
+      // แสดงข้อความแจ้งเตือนที่หน้า quiz แทน
+      showRoomFullMessage();
+      return;
+    }
+
+    // ถ้าจำนวนผู้เล่นยังไม่เต็ม ให้เข้าร่วมได้
+    window.location.href = `/game-room/${roomId}`;
+  }
+
+  // ฟังก์ชันแสดงข้อความห้องเต็ม
+  function showRoomFullMessage() {
+    // สร้าง element สำหรับแสดงข้อความ
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+    messageDiv.innerHTML = `
+      <div class="flex items-center gap-2">
+        <i class="fa-solid fa-exclamation-triangle text-red-500"></i>
+        <div>
+          <div class="font-bold">ห้องเต็มแล้ว!</div>
+          <div class="text-sm">กรุณารอให้มีคนออกจากห้องก่อน</div>
+        </div>
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-auto text-red-500 hover:text-red-700">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+    `;
+    
+    document.body.appendChild(messageDiv);
+    
+    // ลบข้อความอัตโนมัติหลังจาก 5 วินาที
+    setTimeout(() => {
+      if (messageDiv.parentElement) {
+        messageDiv.remove();
+      }
+    }, 5000);
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    // ตรวจสอบ URL parameter สำหรับข้อความห้องเต็ม
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('error') === 'room_full') {
+      const roomFullMessage = document.getElementById('room-full-message');
+      if (roomFullMessage) {
+        roomFullMessage.style.display = 'block';
+        // ลบ parameter จาก URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+
     const playerCountElements = document.querySelectorAll('.player-count');
     const fetchControllers = {};
 
     playerCountElements.forEach(el => {
       const roomId = el.dataset.roomId;
+      const maxPlayers = parseInt(el.dataset.maxPlayers);
       let lastCount = null; // จำค่าล่าสุดเพื่อเช็คว่ามีการเปลี่ยนหรือไม่
 
       const updatePlayerCount = () => {
@@ -121,6 +196,9 @@
             if (players.length !== lastCount) {
               el.textContent = players.length;
               lastCount = players.length;
+
+              // อัปเดตสถานะห้อง
+              updateRoomStatus(roomId, players.length, maxPlayers);
             }
           })
           .catch(err => { 
@@ -128,6 +206,48 @@
               console.error(`Error fetching players for room ${roomId}:`, err);
             }
           });
+      };
+
+      // ฟังก์ชันอัปเดตสถานะห้อง
+      const updateRoomStatus = (roomId, currentCount, maxCount) => {
+        const statusEl = document.querySelector(`.room-status[data-room-id="${roomId}"]`);
+        const joinBtn = document.getElementById(`join-btn-${roomId}`);
+        
+        if (currentCount >= maxCount) {
+          // ห้องเต็ม
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div class="flex items-center gap-2 text-red-600 text-sm font-medium">
+                <i class="fa-solid fa-exclamation-triangle"></i>
+                <span>ห้องเต็มแล้ว</span>
+              </div>
+            `;
+          }
+          
+          if (joinBtn && !joinBtn.classList.contains('owner-room')) {
+            joinBtn.disabled = true;
+            joinBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            joinBtn.classList.remove('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
+            joinBtn.innerHTML = '<i class="fa-solid fa-lock mr-2"></i>ห้องเต็ม';
+          }
+        } else {
+          // ห้องยังไม่เต็ม
+          if (statusEl) {
+            statusEl.innerHTML = `
+              <div class="flex items-center gap-2 text-green-600 text-sm font-medium">
+                <i class="fa-solid fa-check-circle"></i>
+                <span>พร้อมเข้าร่วม</span>
+              </div>
+            `;
+          }
+          
+          if (joinBtn) {
+            joinBtn.disabled = false;
+            joinBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            joinBtn.classList.add('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
+            joinBtn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> เข้าร่วมเกม';
+          }
+        }
       };
 
       // โหลดตอนเริ่ม
