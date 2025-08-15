@@ -57,18 +57,59 @@ app.get('/api/room-players/:roomId', async (req, res) => {
     const roomId = req.params.roomId;
     
     const players = await new Promise((resolve, reject) => {
-      usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, rows) => {
+      usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ? AND room_players.is_online = 1', [roomId], (err, rows) => {
         if (err) reject(err);
         else resolve(rows || []);
       });
     });
     
-    console.log('API: Players found:', players);
+    console.log('API: Online players found:', players);
     res.json(players);
     
   } catch (error) {
     console.error('API: Error fetching players:', error);
     res.status(500).json({ error: 'เกิดข้อผิดพลาดในการดึงข้อมูลผู้เล่น' });
+  }
+});
+
+// API endpoint สำหรับจัดการ player leave (backup สำหรับ beforeunload)
+app.post('/api/player-leave', express.json(), async (req, res) => {
+  try {
+    const { roomId, userId, action } = req.body;
+    
+    if (action === 'leave_room' && roomId && userId) {
+      // อัปเดตสถานะเป็นออฟไลน์
+      await new Promise((resolve, reject) => {
+        usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], function(err) {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+      
+      console.log(`API: Player ${userId} marked as offline in room ${roomId}`);
+      
+      // แจ้งผู้เล่นอื่นๆ ผ่าน socket.io
+      const io = req.app.get('io');
+      if (io) {
+        io.to(`room_${roomId}`).emit('user_left', { user: { id: userId, name: 'Unknown' } });
+        
+        // อัปเดตรายชื่อผู้เล่น
+        const players = await new Promise((resolve, reject) => {
+          usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ? AND room_players.is_online = 1', [roomId], (err, rows) => {
+            if (err) reject(err);
+            else resolve(rows || []);
+          });
+        });
+        
+        io.to(`room_${roomId}`).emit('player_list_updated', { roomId, players });
+      }
+    }
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('API: Error handling player leave:', error);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาดในการจัดการการออกจากห้อง' });
   }
 });
 

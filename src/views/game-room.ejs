@@ -129,6 +129,9 @@
             <i class="fa-solid fa-user"></i> <span class="player-name"><%= player.name %></span> 
             <span class="text-xs text-gray-400"><%= player.is_owner ? '(เจ้าของห้อง)' : '' %></span> 
             <span class="ml-2 text-green-600 font-bold">+<%= player.score %></span>
+            <span class="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              <i class="fa-solid fa-circle text-green-500 mr-1"></i>ออนไลน์
+            </span>
 
             <% if (playerFoods[player.id] && playerFoods[player.id].length > 0) { %>
               <div class="mt-1 text-xs text-blue-600">

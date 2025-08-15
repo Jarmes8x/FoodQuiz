@@ -118,6 +118,7 @@ usersDB.serialize(() => {
       user_id INTEGER NOT NULL,
       score INTEGER DEFAULT 0,
       is_owner BOOLEAN DEFAULT 0,
+      is_online BOOLEAN DEFAULT 0,
       answered BOOLEAN DEFAULT 0,
       answer_time DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -127,6 +128,15 @@ usersDB.serialize(() => {
   `, (err) => {
     if (err) {
       console.error("Error creating room_players table:", err.message);
+    }
+  });
+
+  // เพิ่มคอลัมน์ is_online ถ้ายังไม่มี (สำหรับฐานข้อมูลเก่า)
+  usersDB.run(`
+    ALTER TABLE room_players ADD COLUMN is_online BOOLEAN DEFAULT 0
+  `, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error("Error adding is_online column to room_players table:", err.message);
     }
   });
 

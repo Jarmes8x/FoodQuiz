@@ -72,9 +72,10 @@ const getGameState = async (roomId, userId) => {
 
 const updatePlayerList = async (io, roomId) => {
   try {
+    // ดึงเฉพาะผู้เล่นที่ออนไลน์
     const players = await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
-        usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, players) => {
+        usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ? AND room_players.is_online = 1', [roomId], (err, players) => {
           if (err) reject(err);
           else resolve(players || []);
         });
@@ -124,7 +125,7 @@ const addPlayerToRoom = async (roomId, user) => {
       // เพิ่มผู้เล่นลงในฐานข้อมูล
       await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.run('INSERT INTO room_players (room_id, user_id, score, is_owner) VALUES (?, ?, 0, ?)', [roomId, user.id, isOwner ? 1 : 0], (err) => {
+          usersDB.run('INSERT INTO room_players (room_id, user_id, score, is_owner, is_online) VALUES (?, ?, 0, ?, 1)', [roomId, user.id, isOwner ? 1 : 0], (err) => {
             if (err) reject(err);
             else resolve();
           });
@@ -132,9 +133,19 @@ const addPlayerToRoom = async (roomId, user) => {
       });
 
       return true;
-    }
+    } else {
+      // ถ้าผู้เล่นมีอยู่แล้ว ให้อัปเดตสถานะเป็นออนไลน์
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('UPDATE room_players SET is_online = 1 WHERE room_id = ? AND user_id = ?', [roomId, user.id], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
 
-    return false;
+      return false;
+    }
   } catch (error) {
     console.error('Error adding player to room:', error);
     throw error;
@@ -144,9 +155,17 @@ const addPlayerToRoom = async (roomId, user) => {
 // ลบผู้เล่นออกจากห้อง (ไม่ลบข้อมูลคะแนน)
 const removePlayerFromRoom = async (roomId, user) => {
   try {
-    // ไม่ลบข้อมูลผู้เล่นออกจากฐานข้อมูล เพื่อเก็บคะแนนไว้
-    // แค่ให้ออกจาก socket room เท่านั้น
-    console.log(`Player ${user.name} left room ${roomId} but data preserved`);
+    // อัปเดตสถานะเป็นออฟไลน์แทนการลบข้อมูล
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, user.id], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+
+    console.log(`Player ${user.name} left room ${roomId} - marked as offline`);
     return true;
   } catch (error) {
     console.error('Error removing player from room:', error);
@@ -159,6 +178,9 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('join_room', async (roomId, user) => {
     try {
       socket.join(`room_${roomId}`);
+      
+      // เก็บ userId ไว้ใน socket เพื่อใช้ตอน disconnect
+      socket.userId = user.id;
 
       const isNewPlayer = await addPlayerToRoom(roomId, user);
 
@@ -237,105 +259,117 @@ const setupRoomHandlers = (io, socket) => {
   });
 
   // เมื่อผู้เล่นออกจากห้อง
-  socket.on('leave_room', async (roomId, user) => {
+  socket.on('leave_room', async (data) => {
     try {
+      console.log('Leave room event received:', data);
+      
+      let roomId, userId, user;
+      
+      // รองรับทั้งรูปแบบเก่าและใหม่
+      if (typeof data === 'object' && data.roomId && data.userId) {
+        // รูปแบบใหม่: { roomId, userId }
+        roomId = data.roomId;
+        userId = data.userId;
+        user = { id: userId, name: 'Unknown' }; // ต้องหาชื่อผู้เล่นจากฐานข้อมูล
+      } else if (arguments.length === 2) {
+        // รูปแบบเก่า: (roomId, user)
+        roomId = arguments[0];
+        user = arguments[1];
+        userId = user.id;
+      } else {
+        console.error('Invalid leave_room data format:', data);
+        return;
+      }
+
+      console.log(`User ${userId} is leaving room ${roomId}`);
+
+      // ออกจาก socket room
       socket.leave(`room_${roomId}`);
 
-      // ไม่ลบข้อมูลผู้เล่นออกจากฐานข้อมูล เพื่อเก็บคะแนนไว้
-      await removePlayerFromRoom(roomId, user);
-      io.to(`room_${roomId}`).emit('user_left', { user, socketId: socket.id });
+      // อัปเดตสถานะเป็นออฟไลน์
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], function(err) {
+            if (err) {
+              console.error('Error updating player status in DB:', err);
+              reject(err);
+            } else {
+              console.log(`Updated player with user_id ${userId} to offline in room ${roomId}. Rows affected: ${this.changes}`);
+              resolve({ changes: this.changes });
+            }
+          });
+        });
+      });
+
+      // แจ้งผู้เล่นอื่นๆ ว่าผู้เล่นนี้ออกจากห้อง
+      io.to(`room_${roomId}`).emit('user_left', { user: { id: userId, name: user.name || 'Unknown' }, socketId: socket.id });
+      
+      // อัปเดตรายชื่อผู้เล่น
       await updatePlayerList(io, roomId);
+      
+      console.log(`Player ${userId} successfully left room ${roomId}`);
 
     } catch (error) {
       console.error('Error in leave_room:', error);
     }
   });
 
-  // ในส่วนของ Listener สำหรับ 'leave_room' event
-socket.on('leave_room', ({ roomId, userId }) => {
-    try {
-        console.log(`User ${userId} is leaving room ${roomId}`);
-
-        // สร้าง Promise สำหรับการลบผู้ใช้จากฐานข้อมูล
-        new Promise((resolve, reject) => {
-            // SQL statement สำหรับการลบข้อมูล
-            const sql = 'DELETE FROM room_players WHERE room_id = ? AND user_id = ?';
-            
-            usersDB.run(sql, [roomId, userId], function(err) {
-                if (err) {
-                    console.error('Error deleting player from DB:', err);
-                    reject(err);
-                } else {
-                    console.log(`Deleted player with user_id ${userId} from room ${roomId}. Rows affected: ${this.changes}`);
-                    resolve({ changes: this.changes });
-                }
-            });
-        })
-        .then(() => {
-            // เมื่อลบจากฐานข้อมูลสำเร็จ
-            // หลังจากนั้นค่อยทำการลบออกจาก state ของห้อง (in-memory state)
-            const room = rooms[roomId];
-            if (room) {
-                room.players = room.players.filter(p => p.id !== userId);
-                io.to(roomId).emit('player_left', { userId });
-                console.log(`Player ${userId} removed from in-memory room state.`);
-
-                // หากห้องไม่มีผู้เล่นเหลืออยู่แล้ว ให้ลบห้องนั้นทิ้ง
-                if (room.players.length === 0) {
-                    delete rooms[roomId];
-                    console.log(`Room ${roomId} deleted as it is empty.`);
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Failed to handle leave_room event:', error);
-            // สามารถเพิ่มการจัดการ error ที่เหมาะสม เช่น การส่งข้อความแจ้งเตือนกลับไปที่ client
-        });
-
-    } catch (error) {
-        console.error('Error in leave_room event handler:', error);
-    }
-});
-
-
-  // เมื่อผู้เล่น disconnect
-socket.on('disconnect', async () => {
-  try {
-    const rooms = [];
-    for (const [room, socketsSet] of io.sockets.adapter.rooms) {
-      if (room.startsWith('room_') && socketsSet.has(socket.id)) {
-        rooms.push(room);
-      }
-    }
-    for (const room of rooms) {
-      const roomId = room.replace('room_', '');
-      await updatePlayerList(io, roomId);
-    }
-  } catch (error) {
-    console.error('Error in disconnect:', error);
-  }
-});
-
   // เมื่อต้องการดึงรายชื่อผู้เล่นในห้อง
   socket.on('get_room_players', async ({ roomId }) => {
     try {
       console.log(`Getting room players for room ${roomId}...`);
       
+      // ดึงเฉพาะผู้เล่นที่ออนไลน์
       const players = await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ?', [roomId], (err, players) => {
+          usersDB.all('SELECT users.id, users.name, room_players.score, room_players.is_owner FROM room_players JOIN users ON room_players.user_id = users.id WHERE room_players.room_id = ? AND room_players.is_online = 1', [roomId], (err, players) => {
             if (err) reject(err);
             else resolve(players || []);
           });
         });
       });
 
-      console.log(`Found ${players.length} players in room ${roomId}:`, players);
+      console.log(`Found ${players.length} online players in room ${roomId}:`, players);
       socket.emit('room_players', { roomId, players });
       console.log(`Sent room_players event to client for room ${roomId}`);
     } catch (error) {
       console.error('Error getting room players:', error);
       socket.emit('error', { message: 'เกิดข้อผิดพลาดในการดึงรายชื่อผู้เล่น' });
+    }
+  });
+
+  // เมื่อผู้เล่น disconnect
+  socket.on('disconnect', async () => {
+    try {
+      const rooms = [];
+      for (const [room, socketsSet] of io.sockets.adapter.rooms) {
+        if (room.startsWith('room_') && socketsSet.has(socket.id)) {
+          rooms.push(room);
+        }
+      }
+      
+      // หา user_id ของผู้เล่นที่ disconnect
+      const userId = socket.userId; // ต้องเก็บ userId ไว้ใน socket เมื่อ join room
+      
+      for (const room of rooms) {
+        const roomId = room.replace('room_', '');
+        
+        // อัปเดตสถานะเป็นออฟไลน์
+        if (userId) {
+          await executeWithRetry(async () => {
+            return new Promise((resolve, reject) => {
+              usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
+            });
+          });
+        }
+        
+        await updatePlayerList(io, roomId);
+      }
+    } catch (error) {
+      console.error('Error in disconnect:', error);
     }
   });
 

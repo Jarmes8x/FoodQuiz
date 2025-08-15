@@ -148,11 +148,11 @@ function buyIngredient(ingredientName) {
       updateMyIngredients(myIngredients);
 
       // อัปเดตวัตถุดิบใน player list
-      updatePlayerIngredientsInList(user.id, myIngredients);
+      updatePlayerIngredientsInList(window.user.id, myIngredients);
 
       socket.emit('buy_ingredient', {
-        roomId: window.roomId || roomId,
-        userId: user.id,
+        roomId: window.roomId,
+        userId: window.user.id,
         ingredient: ingredientName
       });
     }
@@ -192,12 +192,12 @@ function cookMeal(mealName, requiredIngredientsStr) {
 
   // อัปเดต UI
   updateMyIngredients(updatedIngredients);
-  updatePlayerIngredientsInList(user.id, updatedIngredients);
+  updatePlayerIngredientsInList(window.user.id, updatedIngredients);
 
   // ส่งข้อมูลไปยัง server เพื่อบันทึกการทำอาหาร
   socket.emit('cook_meal', {
-    roomId: window.roomId || roomId,
-    userId: user.id,
+    roomId: window.roomId,
+    userId: window.user.id,
     mealName: mealName,
     usedIngredients: requiredIngredients,
     remainingIngredients: updatedIngredients
@@ -295,7 +295,7 @@ socket.on('meal_cooked_success', ({ mealName, usedIngredients, remainingIngredie
 
   // อัปเดต UI
   updateMyIngredients(remainingIngredients);
-  updatePlayerIngredientsInList(user.id, remainingIngredients);
+  updatePlayerIngredientsInList(window.user.id, remainingIngredients);
 
   // โหลดประวัติการทำอาหารใหม่
   loadCookingHistory();
@@ -575,47 +575,7 @@ socket.on('game_winner_info', ({ winner, roomName }) => {
   }
 });
 
-// รับการแจ้งเตือนรีเซ็ตเกม
-socket.on('game_reset', ({ message }) => {
-  console.log('เกมถูกรีเซ็ต:', message);
-  
-  // รีเซ็ตตัวแปรเกม
-  currentQuestion = 0;
-  answeredQuestions = [];
-  gameStarted = false;
-  gameFinished = true;
-  
-  // ซ่อนปุ่มเกม
-  const startBtn = document.getElementById('start-btn');
-  const nextBtn = document.getElementById('next-btn');
-  const resetBtn = document.getElementById('reset-game-btn');
-  
-  if (startBtn) startBtn.classList.add('hidden');
-  if (nextBtn) nextBtn.classList.add('hidden');
-  if (resetBtn) resetBtn.classList.add('hidden');
-  
-  // ซ่อนคำถามและตัวเลือก
-  const questionContainer = document.getElementById('question-container');
-  const choicesContainer = document.getElementById('choices-container');
-  const questionText = document.getElementById('question-text');
-  const hintText = document.getElementById('hint-text');
-  
-  if (questionContainer) questionContainer.style.display = 'none';
-  if (choicesContainer) choicesContainer.style.display = 'none';
-  if (questionText) questionText.style.display = 'none';
-  if (hintText) hintText.style.display = 'none';
-  
-  // แสดงข้อความแจ้งเตือน
-  Swal.fire({
-    title: '🎉 เกมจบแล้ว!',
-    text: 'คำถามถูกรีเซ็ตแล้ว - ห้องนี้ไม่สามารถเล่นต่อได้',
-    icon: 'success',
-    confirmButtonText: 'ตกลง',
-    confirmButtonColor: '#10b981',
-    allowOutsideClick: true,
-    allowEscapeKey: true
-  });
-});
+
 
 // รับการแจ้งเตือนห้องจบแล้ว
 socket.on('room_finished', ({ roomId, message }) => {
@@ -704,6 +664,11 @@ socket.on('my_foods', ({ roomId, userId, foods }) => {
 socket.on('player_list_updated', ({ roomId, players }) => {
   console.log('อัปเดตรายชื่อผู้เล่น:', players);
   updatePlayerList(players);
+  
+  // อัปเดตจำนวนผู้เล่นด้วย
+  if (players) {
+    updatePlayerCount(players.length);
+  }
 });
 
 // รับการอัปเดตจำนวนผู้เล่นในห้อง
@@ -716,12 +681,33 @@ socket.on('update_room_player_count', ({ roomId, count }) => {
 socket.on('user_joined', ({ user, socketId }) => {
   console.log(`ผู้เล่น ${user.name} เข้าร่วมห้อง`);
   showNotification(`${user.name} เข้าร่วมห้อง`, 'info');
+  
+  // อัปเดตจำนวนผู้เล่น
+  const playerCountEl = document.getElementById('player-count');
+  if (playerCountEl) {
+    const currentCount = parseInt(playerCountEl.textContent) || 0;
+    playerCountEl.textContent = currentCount + 1;
+  }
 });
 
 // รับการแจ้งเตือนเมื่อมีผู้เล่นออกจากห้อง
 socket.on('user_left', ({ user, socketId }) => {
   console.log(`ผู้เล่น ${user.name} ออกจากห้อง`);
   showNotification(`${user.name} ออกจากห้อง`, 'info');
+  
+  // ลบผู้เล่นออกจากรายชื่อทันที
+  const playerLi = document.getElementById(`player-li-${user.id}`);
+  if (playerLi) {
+    playerLi.remove();
+    console.log(`Removed player ${user.name} from player list`);
+  }
+  
+  // อัปเดตจำนวนผู้เล่น
+  const playerCountEl = document.getElementById('player-count');
+  if (playerCountEl) {
+    const currentCount = parseInt(playerCountEl.textContent) || 0;
+    playerCountEl.textContent = Math.max(0, currentCount - 1);
+  }
 });
 
 // รับรายชื่อผู้เล่นในห้อง
@@ -990,8 +976,8 @@ function saveGameState() {
   };
 
   socket.emit('save_game_state', {
-    roomId: window.roomId || roomId,
-    userId: user.id,
+    roomId: window.roomId,
+    userId: window.user.id,
     gameState: gameStateToSave
   });
 }
@@ -1076,8 +1062,8 @@ function updateCookingStats(cookedMeals) {
 // ฟังก์ชันดึงประวัติการทำอาหาร
 function loadCookingHistory() {
   socket.emit('get_cooked_meals', {
-    roomId: window.roomId || roomId,
-    userId: user.id
+    roomId: window.roomId,
+    userId: window.user.id
   });
 }
 
@@ -1092,7 +1078,7 @@ socket.on('ingredient-purchased', ({ ingredientName, price, newScore, ingredient
   updateMyIngredients(ingredients);
 
   // อัปเดตวัตถุดิบใน player list
-  updatePlayerIngredientsInList(user.id, ingredients);
+  updatePlayerIngredientsInList(window.user.id, ingredients);
 
   // แสดงข้อความซื้อสำเร็จ
   showPurchaseSuccessMessage(ingredientName, price);
@@ -1140,7 +1126,7 @@ socket.on('game_reset', ({ message, resetBy }) => {
   // อัปเดต UI
   updateMyScore(0);
   updateMyIngredients([]);
-  updatePlayerIngredientsInList(user.id, []);
+  updatePlayerIngredientsInList(window.user.id, []);
   
   // แสดงปุ่มเริ่มเกมสำหรับเจ้าของห้อง
   if (isOwner) {
@@ -1226,13 +1212,13 @@ function updateMyScore(newScore) {
   }
 
   // อัปเดตคะแนนในรายชื่อผู้เล่น
-  const scoreEl = document.getElementById(`score-${user.id}`);
+  const scoreEl = document.getElementById(`score-${window.user.id}`);
   if (scoreEl) {
     scoreEl.textContent = newScore;
   }
 
   // อัปเดตคะแนนใน player list ด้วย
-  const playerScoreEl = document.querySelector(`#player-li-${user.id} .text-green-600`);
+  const playerScoreEl = document.querySelector(`#player-li-${window.user.id} .text-green-600`);
   if (playerScoreEl) {
     playerScoreEl.textContent = `+${newScore}`;
   }
@@ -1588,11 +1574,11 @@ function updateMyShopUI() {
   updateMyIngredients(myIngredients);
 
   // อัปเดตวัตถุดิบใน player list
-  updatePlayerIngredientsInList(user.id, myIngredients);
+  updatePlayerIngredientsInList(window.user.id, myIngredients);
 }
 
 socket.on('update_points_ingredients', data => {
-  if (data.userId === user.id) {
+  if (data.userId === window.user.id) {
     // ป้องกัน undefined และ NaN
     const newPoints = typeof data.points === 'number' && !isNaN(data.points) ? data.points : currentPlayerScore;
 
@@ -1611,7 +1597,7 @@ socket.on('update_points_ingredients', data => {
     updateMyScore(newPoints);
 
     // อัปเดตวัตถุดิบใน player list
-    updatePlayerIngredientsInList(user.id, data.ingredients);
+    updatePlayerIngredientsInList(window.user.id, data.ingredients);
 
     // ถ้ามีอาหารใหม่ ให้แสดงป๊อบอัพ
     if (data.food && data.food !== '' && data.food !== myFood && data.food !== 'ยังทำอาหารไม่ได้') {
@@ -1645,6 +1631,9 @@ function showFoodModal(food) {
 // Event Listeners รวม
 // ===============================
 document.addEventListener('DOMContentLoaded', () => {
+  // โหลดรายชื่อผู้เล่นเมื่อหน้าเว็บโหลดเสร็จ
+  loadPlayerList();
+  
   // ตรวจสอบว่าเกมจบแล้วหรือไม่
   if (isGameFinished) {
     console.log('เกมจบแล้ว - ปิดการควบคุมเกม');
@@ -1701,7 +1690,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelButtonColor: '#6b7280'
       }).then((result) => {
         if (result.isConfirmed) {
-          socket.emit('delete_room', roomId, user.id);
+          socket.emit('delete_room', window.roomId, window.user.id);
         }
       });
     };
@@ -1722,7 +1711,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelButtonColor: '#6b7280'
       }).then((result) => {
         if (result.isConfirmed) {
-          socket.emit('reset_game', roomId, user.id);
+          socket.emit('reset_game', window.roomId, window.user.id);
         }
       });
     };
@@ -1747,7 +1736,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ปุ่มสุ่มอาหาร
     if (e.target.id === 'random-food-btn') {
-      socket.emit('random_food', { roomId, userId: user.id });
+      socket.emit('random_food', { roomId: window.roomId, userId: window.user.id });
     }
 
     // ปุ่มตอบคำถาม (ถ้ามี)
@@ -1767,8 +1756,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // ดึงวัตถุดิบของผู้เล่น
   if (window.roomId || roomId) {
     socket.emit('get_player_ingredients', {
-      roomId: window.roomId || roomId,
-      userId: user.id
+      roomId: window.roomId,
+      userId: window.user.id
     });
   }
 
@@ -1905,7 +1894,7 @@ function randomFood() {
   }
 
   // ใช้ socket.emit แทนการสุ่มใน client
-  socket.emit('random_food', { roomId: window.roomId || roomId, userId: user.id });
+  socket.emit('random_food', { roomId: window.roomId, userId: window.user.id });
 }
 
 // รับสถานะเกมที่โหลดมา
@@ -1965,13 +1954,7 @@ socket.on('game_state_loaded', ({ gameState: loadedGameState }) => {
   }
 });
 
-// รับ event อาหารที่สุ่มได้เมื่อเข้าห้อง
-socket.on('foods_assigned', data => {
-  if (data.userId === user.id) {
-    console.log('Received assigned foods:', data.foods);
-    updateAssignedFoodsUI(data.foods);
-  }
-});
+
 
 // ฟังก์ชันอัปเดต UI แสดงอาหารที่สุ่มได้
 function updateAssignedFoodsUI(foods) {
@@ -2004,7 +1987,7 @@ function enableIngredientShop() {
     };
   });
   document.getElementById('random-food-btn').onclick = () => {
-    socket.emit('random_food', { roomId, userId: user.id });
+    socket.emit('random_food', { roomId: window.roomId, userId: window.user.id });
   };
   updateMyShopUI();
 }
@@ -2014,74 +1997,14 @@ function enableIngredientShop() {
 let gameStartHandled = false;
 
 // Join room
-console.log('Joining room:', { roomId, user });
-socket.emit('join_room', roomId, user);
-
-// อัปเดตรายชื่อผู้เล่นเมื่อเข้าห้องครั้งแรกและแบบ realtime
-socket.on('player_list_updated', data => {
-  console.log('Received player_list_updated:', data);
-  if (data && data.roomId == roomId && data.players) {
-    console.log('Updating player list with scores:', data.players);
-    updatePlayerList(data.players);
-  } else {
-    console.log('Invalid player_list_updated data:', data);
-  }
-});
+console.log('Joining room:', { roomId: window.roomId, user: window.user });
+socket.emit('join_room', window.roomId, window.user);
 
 
 
-// ฟังก์ชันอัปเดตรายชื่อผู้เล่น
-function updatePlayerList(players) {
-  console.log('updatePlayerList called with:', players);
-  if (!Array.isArray(players)) {
-    console.error('Players is not an array:', players);
-    return;
-  }
 
-  const list = document.getElementById('player-list');
-  const scoreList = document.getElementById('score-list');
 
-  if (!list || !scoreList) {
-    console.error('Required DOM elements not found');
-    return;
-  }
 
-  list.innerHTML = '';
-  scoreList.innerHTML = '';
-
-  players.forEach(player => {
-    if (player && player.id && player.name !== undefined) {
-      const score = player.score || 0;
-
-      list.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}" id="player-li-${player.id}"><i class="fa-solid fa-user"></i> <span class="player-name">${player.name}</span> <span class="text-xs text-gray-400">${player.is_owner ? '(เจ้าของห้อง)' : ''}</span> <span class="ml-2 text-green-600 font-bold">+${score}</span></li>`;
-      scoreList.innerHTML += `<li class="mb-1 ${player.is_owner ? 'font-bold text-purple-700' : ''}"><i class="fa-solid fa-user"></i> ${player.name} <span class="ml-2 text-green-600 font-bold"><span id="score-${player.id}">${score}</span></span></li>`;
-    } else {
-      console.warn('Invalid player data:', player);
-    }
-  });
-
-  const playerCountElement = document.getElementById('player-count');
-  if (playerCountElement) {
-    playerCountElement.textContent = players.length;
-  }
-}
-
-// Update player list real-time เมื่อมีคนเข้าร่วม
-socket.on('user_joined', data => {
-  console.log('User joined event received:', data);
-});
-
-// Update player list real-time เมื่อมีคนออก
-socket.on('user_left', data => {
-  console.log('User left event received:', data);
-});
-
-// ฟัง event update_room_player_count เพื่ออัปเดตจำนวนผู้เล่นแบบ real-time
-socket.on('update_room_player_count', data => {
-  if (data && data.roomId == roomId) {
-    document.getElementById('player-count').textContent = data.count;
-  }
-});
 
 // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ
 window.addEventListener('beforeunload', () => {
@@ -2335,7 +2258,7 @@ socket.on('select_questions', function (questions) {
       socket.emit('questions_selected', roomId, selectedQuestions);
 
       // Start game immediately without countdown
-      socket.emit('start_game', roomId, user.id);
+      socket.emit('start_game', window.roomId, window.user.id);
 
       // แสดง SweetAlert แจ้งว่ากำลังเริ่มเกม
       Swal.fire({
@@ -2489,38 +2412,7 @@ socket.on('game_questions', function (selectedQuestions) {
   }
 });
 
-// Listen for game start (question UI)
-let selectedAnswerIdx = null;
-socket.on('game_started', () => {
-  console.log('Game started event received');
-  if (gameStartHandled) return;
-  gameStartHandled = true;
 
-  // บันทึกสถานะเกมเริ่ม
-  gameState.gameStarted = true;
-  gameState.currentQuestion = currentQuestion;
-  saveGameState();
-
-  // Enable ingredient shop
-  enableIngredientShop();
-
-  // Trigger food randomization for this user
-  socket.emit('random_food', { roomId, userId: user.id });
-
-  // Start the actual game immediately
-  selectedAnswerIdx = null;
-  showQuestion();
-  const waitingArea = document.getElementById('waiting-area');
-  if (waitingArea) {
-    waitingArea.classList.add('hidden');
-  }
-  if (!isOwner) {
-    const startBtn = document.getElementById('start-btn');
-    if (startBtn) {
-      startBtn.classList.add('hidden');
-    }
-  }
-});
 
 // Listen for next question
 socket.on('next_question', () => {
@@ -2657,8 +2549,8 @@ function showQuestion() {
     if (!answered && !isGameFinished) {
       answered = true;
       socket.emit('submit_answer', {
-        roomId,
-        userId: user.id,
+        roomId: window.roomId,
+        userId: window.user.id,
         answerIndex: -1,
         answerTime: 20000, // 20 วินาที
         questionIndex: currentQuestion,
@@ -2668,7 +2560,7 @@ function showQuestion() {
 
     // แจ้ง backend ว่าคำถามนี้จบแล้ว
     socket.emit('question_ended', {
-      roomId,
+      roomId: window.roomId,
       questionIndex: currentQuestion,
       currentQuestion: questions[currentQuestion]
     });
@@ -2677,7 +2569,7 @@ function showQuestion() {
     setTimeout(() => {
       if (!questionEnded) {
         socket.emit('question_ended', {
-          roomId,
+          roomId: window.roomId,
           questionIndex: currentQuestion,
           currentQuestion: questions[currentQuestion]
         });
@@ -2734,8 +2626,8 @@ function showQuestion() {
       };
 
       socket.emit('submit_answer', {
-        roomId,
-        userId: user.id,
+        roomId: window.roomId,
+        userId: window.user.id,
         answerIndex: originalAnswerIndex,
         answerTime,
         questionIndex: currentQuestion,
@@ -2853,13 +2745,13 @@ socket.on('user_answered', data => {
     }
 
     // ถ้าเป็นผู้เล่นเอง ให้อัปเดตคะแนนในส่วน "แต้มของคุณ" ด้วย
-    if (data.userId === user.id) {
+    if (data.userId === window.user.id) {
       updateMyScore(data.score);
     }
   }
 
   // ถ้าเป็น user นี้ ให้แสดงปุ่มที่เลือกไว้ (active) ค้างไว้
-  if (data.userId === user.id && typeof data.answerIndex !== 'undefined') {
+  if (data.userId === window.user.id && typeof data.answerIndex !== 'undefined') {
     // อย่าเปลี่ยน selectedAnswerIdx เพราะ data.answerIndex เป็น originalAnswerIndex
     // ใช้ selectedAnswerIdx ที่มีอยู่แล้วจากสถานะเกม
     
@@ -3237,7 +3129,7 @@ document.addEventListener('DOMContentLoaded', function () {
   updateMyIngredients(myIngredients);
 
   // อัปเดตวัตถุดิบใน player list
-  updatePlayerIngredientsInList(user.id, myIngredients);
+  updatePlayerIngredientsInList(window.user.id, myIngredients);
 
   console.log('Initial player score:', currentPlayerScore);
   console.log('Initial myPoints:', myPoints);
@@ -3275,17 +3167,51 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result.isConfirmed) {
           // แจ้ง server ว่าออกจากห้อง
           socket.emit('leave_room', {
-            roomId: window.roomId || roomId,
-            userId: user.id
+            roomId: window.roomId,
+            userId: window.user.id
           });
           
-
-          // เปลี่ยนหน้าไปยังหน้าหลัก (ปรับ URL ตามที่ต้องการ)
-          window.location.href = '/quiz'; // หรือ URL ที่ต้องการ
+          // รอสักครู่ให้ server ประมวลผลก่อนเปลี่ยนหน้า
+          setTimeout(() => {
+            // เปลี่ยนหน้าไปยังหน้าหลัก
+            window.location.href = '/quiz';
+          }, 500);
         }
       });
     });
-  }ไ
+  }
+
+  // จัดการเมื่อผู้เล่นปิดแท็บหรือรีเฟรชหน้า
+  window.addEventListener('beforeunload', () => {
+    // แจ้ง server ว่าออกจากห้อง
+    socket.emit('leave_room', {
+      roomId: window.roomId,
+      userId: window.user.id
+    });
+    
+    // ใช้ sendBeacon เป็น backup เพื่อให้แน่ใจว่า event จะถูกส่ง
+    if (navigator.sendBeacon) {
+      const data = JSON.stringify({
+        roomId: window.roomId,
+        userId: window.user.id,
+        action: 'leave_room'
+      });
+      navigator.sendBeacon('/api/player-leave', data);
+    }
+  });
+
+  // จัดการเมื่อผู้เล่นเปลี่ยนแท็บหรือหน้าต่าง
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      // ผู้เล่นเปลี่ยนแท็บหรือหน้าต่าง - อาจจะออกจากห้อง
+      console.log('User switched tab or window');
+    } else if (document.visibilityState === 'visible') {
+      // ผู้เล่นกลับมาที่แท็บ - ตรวจสอบว่ายังอยู่ในห้องหรือไม่
+      console.log('User returned to tab');
+      // โหลดรายชื่อผู้เล่นใหม่เพื่อให้แน่ใจว่าข้อมูลถูกต้อง
+      loadPlayerList();
+    }
+  });
 });
 
 // ฟังก์ชันปิดการควบคุมเกมเมื่อเกมจบแล้ว
@@ -3368,3 +3294,4 @@ function disableGameControls() {
       }
     }
 }
+
