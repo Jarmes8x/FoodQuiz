@@ -13,8 +13,8 @@ const saveGameState = async (roomId, userId, gameState) => {
           (room_id, user_id, current_question, answered_questions, game_started, game_finished, updated_at) 
           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `, [
-          roomId, 
-          userId, 
+          roomId,
+          userId,
           gameState.currentQuestion || 0,
           JSON.stringify(gameState.answeredQuestions || []),
           gameState.gameStarted ? 1 : 0,
@@ -36,11 +36,11 @@ const getGameState = async (roomId, userId) => {
   try {
     const gameState = await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
-        usersDB.get('SELECT * FROM game_state WHERE room_id = ? AND user_id = ?', 
+        usersDB.get('SELECT * FROM game_state WHERE room_id = ? AND user_id = ?',
           [roomId, userId], (err, row) => {
-          if (err) reject(err);
-          else resolve(row);
-        });
+            if (err) reject(err);
+            else resolve(row);
+          });
       });
     });
 
@@ -194,7 +194,7 @@ const setupRoomHandlers = (io, socket) => {
   socket.on('join_room', async (roomId, user) => {
     try {
       socket.join(`room_${roomId}`);
-      
+
       // เก็บ userId ไว้ใน socket เพื่อใช้ตอน disconnect
       socket.userId = user.id;
 
@@ -213,7 +213,6 @@ const setupRoomHandlers = (io, socket) => {
 
         // ดึงสถานะเกมของผู้เล่น
         const gameState = await getGameState(roomId, user.id);
-        console.log(`Game state for user ${user.id} in room ${roomId}:`, gameState);
         socket.emit('game_state_loaded', { gameState });
 
         // ตรวจสอบสถานะห้องก่อนส่งคำถาม
@@ -225,10 +224,9 @@ const setupRoomHandlers = (io, socket) => {
             });
           });
         });
-        
+
         // ถ้าห้องจบแล้ว ไม่ส่งคำถาม
         if (roomStatus && roomStatus.status === 'finished') {
-          console.log(`Room ${roomId} is finished - not sending questions`);
         } else {
           // ถ้าเกมกำลังดำเนินอยู่ ให้ส่งคำถามไปด้วย
           if (gameState && gameState.gameStarted) {
@@ -250,7 +248,7 @@ const setupRoomHandlers = (io, socket) => {
                     });
                   });
                 });
-                
+
                 if (questions.length > 0) {
                   console.log(`Sending ${questions.length} questions to user ${user.id} for ongoing game`);
                   socket.emit('game_questions', questions);
@@ -287,10 +285,8 @@ const setupRoomHandlers = (io, socket) => {
   // เมื่อผู้เล่นออกจากห้อง
   socket.on('leave_room', async (data) => {
     try {
-      console.log('Leave room event received:', data);
-      
       let roomId, userId, user;
-      
+
       // รองรับทั้งรูปแบบเก่าและใหม่
       if (typeof data === 'object' && data.roomId && data.userId) {
         // รูปแบบใหม่: { roomId, userId }
@@ -307,20 +303,17 @@ const setupRoomHandlers = (io, socket) => {
         return;
       }
 
-      console.log(`User ${userId} is leaving room ${roomId}`);
-
       // ออกจาก socket room
       socket.leave(`room_${roomId}`);
 
       // อัปเดตสถานะเป็นออฟไลน์
       await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
-          usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], function(err) {
+          usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], function (err) {
             if (err) {
               console.error('Error updating player status in DB:', err);
               reject(err);
             } else {
-              console.log(`Updated player with user_id ${userId} to offline in room ${roomId}. Rows affected: ${this.changes}`);
               resolve({ changes: this.changes });
             }
           });
@@ -329,11 +322,9 @@ const setupRoomHandlers = (io, socket) => {
 
       // แจ้งผู้เล่นอื่นๆ ว่าผู้เล่นนี้ออกจากห้อง
       io.to(`room_${roomId}`).emit('user_left', { user: { id: userId, name: user.name || 'Unknown' }, socketId: socket.id });
-      
+
       // อัปเดตรายชื่อผู้เล่น
       await updatePlayerList(io, roomId);
-      
-      console.log(`Player ${userId} successfully left room ${roomId}`);
 
     } catch (error) {
       console.error('Error in leave_room:', error);
@@ -343,8 +334,6 @@ const setupRoomHandlers = (io, socket) => {
   // เมื่อต้องการดึงรายชื่อผู้เล่นในห้อง
   socket.on('get_room_players', async ({ roomId }) => {
     try {
-      console.log(`Getting room players for room ${roomId}...`);
-      
       // ดึงเฉพาะผู้เล่นที่ออนไลน์
       const players = await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
@@ -355,9 +344,7 @@ const setupRoomHandlers = (io, socket) => {
         });
       });
 
-      console.log(`Found ${players.length} online players in room ${roomId}:`, players);
       socket.emit('room_players', { roomId, players });
-      console.log(`Sent room_players event to client for room ${roomId}`);
     } catch (error) {
       console.error('Error getting room players:', error);
       socket.emit('error', { message: 'เกิดข้อผิดพลาดในการดึงรายชื่อผู้เล่น' });
@@ -373,13 +360,13 @@ const setupRoomHandlers = (io, socket) => {
           rooms.push(room);
         }
       }
-      
+
       // หา user_id ของผู้เล่นที่ disconnect
       const userId = socket.userId; // ต้องเก็บ userId ไว้ใน socket เมื่อ join room
-      
+
       for (const room of rooms) {
         const roomId = room.replace('room_', '');
-        
+
         // อัปเดตสถานะเป็นออฟไลน์
         if (userId) {
           await executeWithRetry(async () => {
@@ -391,7 +378,7 @@ const setupRoomHandlers = (io, socket) => {
             });
           });
         }
-        
+
         await updatePlayerList(io, roomId);
       }
     } catch (error) {
@@ -462,11 +449,11 @@ const setupRoomHandlers = (io, socket) => {
       for (const questionId of selectedQuestionIds) {
         await executeWithRetry(async () => {
           return new Promise((resolve, reject) => {
-            usersDB.run('INSERT INTO room_questions (room_id, question_id) VALUES (?, ?)', 
-                       [roomId, questionId], (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
+            usersDB.run('INSERT INTO room_questions (room_id, question_id) VALUES (?, ?)',
+              [roomId, questionId], (err) => {
+                if (err) reject(err);
+                else resolve();
+              });
           });
         });
       }
@@ -499,126 +486,126 @@ const setupRoomHandlers = (io, socket) => {
   // เมื่อส่งคำตอบ
   socket.on('submit_answer', async (data) => {
     try {
-        if (!roomAnswers[data.roomId]) roomAnswers[data.roomId] = {};
-        if (!roomAnswers[data.roomId][data.questionIndex]) roomAnswers[data.roomId][data.questionIndex] = [];
+      if (!roomAnswers[data.roomId]) roomAnswers[data.roomId] = {};
+      if (!roomAnswers[data.roomId][data.questionIndex]) roomAnswers[data.roomId][data.questionIndex] = [];
 
-        roomAnswers[data.roomId][data.questionIndex].push({
-            userId: data.userId,
-            answerIndex: parseInt(data.answerIndex),
-            answerTime: data.answerTime
+      roomAnswers[data.roomId][data.questionIndex].push({
+        userId: data.userId,
+        answerIndex: parseInt(data.answerIndex),
+        answerTime: data.answerTime
+      });
+
+      // ดึงข้อมูลคำถามปัจจุบันจาก client (ส่งมาจาก frontend)
+      const currentQuestionData = data.currentQuestion;
+      let isCorrect = false;
+      let scoreGained = 0;
+
+      console.log('submit_answer - data:', {
+        roomId: data.roomId,
+        userId: data.userId,
+        answerIndex: data.answerIndex,
+        currentQuestion: currentQuestionData
+      });
+
+      if (currentQuestionData && data.answerIndex !== -1) {
+        // ตรวจสอบคำตอบที่ถูกต้อง (answer_index เริ่มจาก 1 แต่ answerIndex เริ่มจาก 0)
+        const correctAnswerIndex = currentQuestionData.answer_index - 1;
+        isCorrect = parseInt(data.answerIndex) === correctAnswerIndex;
+
+        console.log('Answer check:', {
+          userAnswer: data.answerIndex,
+          correctAnswer: correctAnswerIndex,
+          isCorrect: isCorrect
         });
 
-        // ดึงข้อมูลคำถามปัจจุบันจาก client (ส่งมาจาก frontend)
-        const currentQuestionData = data.currentQuestion;
-        let isCorrect = false;
-        let scoreGained = 0;
+        if (isCorrect) {
+          // ใช้คะแนนจากคำถามแต่ละข้อ
+          const questionPoints = currentQuestionData.points || 10; // ถ้าไม่มีคะแนนให้ใช้ 10 เป็นค่าเริ่มต้น
 
-        console.log('submit_answer - data:', {
-          roomId: data.roomId,
-          userId: data.userId,
-          answerIndex: data.answerIndex,
-          currentQuestion: currentQuestionData
-        });
+          // คำนวณคะแนนที่ลดลงตามเวลา (ตอบไวได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
+          const maxTime = 20000; // 20 วินาที
+          const timeUsed = Math.min(data.answerTime, maxTime);
 
-        if (currentQuestionData && data.answerIndex !== -1) {
-            // ตรวจสอบคำตอบที่ถูกต้อง (answer_index เริ่มจาก 1 แต่ answerIndex เริ่มจาก 0)
-            const correctAnswerIndex = currentQuestionData.answer_index - 1;
-            isCorrect = parseInt(data.answerIndex) === correctAnswerIndex;
+          // คะแนนลดลงตามสัดส่วนเวลาที่ใช้ (ตอบทันทีได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
+          const timeRatio = timeUsed / maxTime; // 0 = ตอบทันที, 1 = ตอบช้า
+          scoreGained = Math.floor(questionPoints * (1 - timeRatio * 0.5)); // ลดลงสูงสุด 50%
 
-            console.log('Answer check:', {
-              userAnswer: data.answerIndex,
-              correctAnswer: correctAnswerIndex,
-              isCorrect: isCorrect
-            });
-
-            if (isCorrect) {
-                // ใช้คะแนนจากคำถามแต่ละข้อ
-                const questionPoints = currentQuestionData.points || 10; // ถ้าไม่มีคะแนนให้ใช้ 10 เป็นค่าเริ่มต้น
-                
-                // คำนวณคะแนนที่ลดลงตามเวลา (ตอบไวได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
-                const maxTime = 20000; // 20 วินาที
-                const timeUsed = Math.min(data.answerTime, maxTime);
-                
-                // คะแนนลดลงตามสัดส่วนเวลาที่ใช้ (ตอบทันทีได้คะแนนเต็ม ตอบช้าคะแนนลดลง)
-                const timeRatio = timeUsed / maxTime; // 0 = ตอบทันที, 1 = ตอบช้า
-                scoreGained = Math.floor(questionPoints * (1 - timeRatio * 0.5)); // ลดลงสูงสุด 50%
-
-                console.log('Score calculation:', {
-                  questionPoints: questionPoints,
-                  timeUsed: timeUsed,
-                  timeRatio: timeRatio,
-                  scoreGained: scoreGained
-                });
-            }
-        }
-
-        // ดึงคะแนนปัจจุบัน
-        const scoreRow = await executeWithRetry(async () => {
-          return new Promise((resolve, reject) => {
-            usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
-              if (err) reject(err);
-              else resolve(row);
-            });
-          });
-        });
-
-        const currentScore = scoreRow ? scoreRow.score : 0;
-        const newScore = currentScore + scoreGained;
-
-        console.log('Score update:', {
-          currentScore: currentScore,
-          scoreGained: scoreGained,
-          newScore: newScore
-        });
-
-        // อัปเดตคะแนนในฐานข้อมูล
-        await executeWithRetry(async () => {
-          return new Promise((resolve, reject) => {
-            usersDB.run('UPDATE room_players SET score = ? WHERE room_id = ? AND user_id = ?', [newScore, data.roomId, data.userId], (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
-          });
-        });
-
-        // บันทึกสถานะเกม (คำตอบที่เลือก)
-        const currentGameState = await getGameState(data.roomId, data.userId);
-        const answeredQuestions = [...currentGameState.answeredQuestions];
-        answeredQuestions[data.questionIndex] = {
-          answerIndex: data.answerIndex,
-          answerTime: data.answerTime,
-          isCorrect: isCorrect,
-          scoreGained: scoreGained
-        };
-
-        await saveGameState(data.roomId, data.userId, {
-          ...currentGameState,
-          answeredQuestions: answeredQuestions
-        });
-
-        // ส่งข้อมูลกลับไปยัง client พร้อมข้อมูลคะแนน
-        io.to(`room_${data.roomId}`).emit('user_answered', { 
-            ...data, 
-            score: newScore,
-            isCorrect: isCorrect,
+          console.log('Score calculation:', {
+            questionPoints: questionPoints,
+            timeUsed: timeUsed,
+            timeRatio: timeRatio,
             scoreGained: scoreGained
-        });
+          });
+        }
+      }
 
-        // อัปเดตรายชื่อผู้เล่นเพื่อแสดงคะแนนใหม่
-        await updatePlayerList(io, data.roomId);
+      // ดึงคะแนนปัจจุบัน
+      const scoreRow = await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.get('SELECT score FROM room_players WHERE room_id = ? AND user_id = ?', [data.roomId, data.userId], (err, row) => {
+            if (err) reject(err);
+            else resolve(row);
+          });
+        });
+      });
+
+      const currentScore = scoreRow ? scoreRow.score : 0;
+      const newScore = currentScore + scoreGained;
+
+      console.log('Score update:', {
+        currentScore: currentScore,
+        scoreGained: scoreGained,
+        newScore: newScore
+      });
+
+      // อัปเดตคะแนนในฐานข้อมูล
+      await executeWithRetry(async () => {
+        return new Promise((resolve, reject) => {
+          usersDB.run('UPDATE room_players SET score = ? WHERE room_id = ? AND user_id = ?', [newScore, data.roomId, data.userId], (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      });
+
+      // บันทึกสถานะเกม (คำตอบที่เลือก)
+      const currentGameState = await getGameState(data.roomId, data.userId);
+      const answeredQuestions = [...currentGameState.answeredQuestions];
+      answeredQuestions[data.questionIndex] = {
+        answerIndex: data.answerIndex,
+        answerTime: data.answerTime,
+        isCorrect: isCorrect,
+        scoreGained: scoreGained
+      };
+
+      await saveGameState(data.roomId, data.userId, {
+        ...currentGameState,
+        answeredQuestions: answeredQuestions
+      });
+
+      // ส่งข้อมูลกลับไปยัง client พร้อมข้อมูลคะแนน
+      io.to(`room_${data.roomId}`).emit('user_answered', {
+        ...data,
+        score: newScore,
+        isCorrect: isCorrect,
+        scoreGained: scoreGained
+      });
+
+      // อัปเดตรายชื่อผู้เล่นเพื่อแสดงคะแนนใหม่
+      await updatePlayerList(io, data.roomId);
 
     } catch (error) {
       console.error('Error in submit_answer:', error);
-      
+
       // แม้จะมี error ก็ยังส่งข้อมูลกลับไปยัง client
       if (data.currentQuestion && data.answerIndex !== -1) {
         const correctAnswerIndex = data.currentQuestion.answer_index - 1;
         const isCorrect = parseInt(data.answerIndex) === correctAnswerIndex;
-        
-        io.to(`room_${data.roomId}`).emit('user_answered', { 
-            ...data, 
-            isCorrect: isCorrect,
-            scoreGained: isCorrect ? 10 : 0
+
+        io.to(`room_${data.roomId}`).emit('user_answered', {
+          ...data,
+          isCorrect: isCorrect,
+          scoreGained: isCorrect ? 10 : 0
         });
       }
     }
@@ -766,11 +753,11 @@ const setupRoomHandlers = (io, socket) => {
       for (const player of players) {
         await executeWithRetry(async () => {
           return new Promise((resolve, reject) => {
-            usersDB.run('DELETE FROM game_state WHERE room_id = ? AND user_id = ?', 
+            usersDB.run('DELETE FROM game_state WHERE room_id = ? AND user_id = ?',
               [roomId, player.user_id], (err) => {
-              if (err) reject(err);
-              else resolve();
-            });
+                if (err) reject(err);
+                else resolve();
+              });
           });
         });
       }
@@ -786,7 +773,7 @@ const setupRoomHandlers = (io, socket) => {
       });
 
       console.log(`Questions reset for room ${roomId}`);
-      
+
       // ลบ game_state ของทุกคนในห้อง
       await executeWithRetry(async () => {
         return new Promise((resolve, reject) => {
@@ -840,7 +827,7 @@ const setupRoomHandlers = (io, socket) => {
       console.log(`Game reset for room ${roomId} by owner ${ownerId}`);
 
       // แจ้งทุกคนในห้องว่าเกมจบแล้ว
-      io.to(`room_${roomId}`).emit('game_reset', { 
+      io.to(`room_${roomId}`).emit('game_reset', {
         message: 'เกมจบแล้ว พร้อมเริ่มเกมใหม่',
         resetBy: ownerId
       });
@@ -928,7 +915,7 @@ const setupRoomHandlers = (io, socket) => {
 const autoResetGame = async (io, roomId) => {
   try {
     console.log(`Auto resetting game for room ${roomId}`);
-    
+
     // ลบคำถามเก่าของห้องนี้
     await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
@@ -938,7 +925,7 @@ const autoResetGame = async (io, roomId) => {
         });
       });
     });
-    
+
     // ลบ game_state ของทุกคนในห้อง (รีเซ็ตเฉพาะสถานะเกม ไม่รีเซ็ตคะแนน)
     await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
@@ -948,22 +935,22 @@ const autoResetGame = async (io, roomId) => {
         });
       });
     });
-    
+
     // ไม่รีเซ็ตคะแนนของผู้เล่น (เก็บคะแนนไว้)
     console.log('Keeping player scores unchanged');
-    
+
     // ไม่ลบข้อมูลอาหารที่ทำแล้วและวัตถุดิบของผู้เล่น (เก็บไว้)
     console.log('Keeping cooked meals and player ingredients/foods unchanged');
-    
+
     console.log(`Auto reset completed for room ${roomId} (questions and game state only)`);
-    
+
     // แจ้งทุกคนในห้องว่าเกมจบแล้ว
     io.to(`room_${roomId}`).emit('game_auto_reset', {
       message: 'เกมจบแล้ว (เฉพาะคำถาม) คะแนน วัตถุดิบ และอาหารยังคงอยู่ พร้อมเริ่มเกมใหม่'
     });
-    
+
     await updatePlayerList(io, roomId);
-    
+
   } catch (error) {
     console.error('Error in auto reset game:', error);
   }

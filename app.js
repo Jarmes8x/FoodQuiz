@@ -46,17 +46,11 @@ app.post('/api/test', express.json(), (req, res) => {
 
 app.post('/api/player-leave', express.json(), async (req, res) => {
   try {
-    console.log('API: Player leave request received');
-    console.log('API: Request headers:', req.headers);
-    console.log('API: Request body type:', typeof req.body);
-    console.log('API: Request body:', req.body);
-    
     // Handle both JSON and string data from sendBeacon
     let body = req.body;
     
     // If body is undefined or null, return error
     if (!body) {
-      console.error('API: Request body is undefined or null');
       return res.status(400).json({ error: 'Request body is required' });
     }
     
@@ -78,7 +72,6 @@ app.post('/api/player-leave', express.json(), async (req, res) => {
     }
     
     const { roomId, userId, action } = body;
-    console.log('API: Extracted data:', { roomId, userId, action });
     
     // Validate required fields
     if (!roomId || !userId || !action) {
@@ -87,8 +80,6 @@ app.post('/api/player-leave', express.json(), async (req, res) => {
     }
     
     if (action === 'leave_room') {
-      console.log(`API: Processing leave_room action for user ${userId} in room ${roomId}`);
-      
       // อัปเดตสถานะเป็นออฟไลน์
       await new Promise((resolve, reject) => {
         usersDB.run('UPDATE room_players SET is_online = 0 WHERE room_id = ? AND user_id = ?', [roomId, userId], function(err) {
@@ -96,8 +87,6 @@ app.post('/api/player-leave', express.json(), async (req, res) => {
           else resolve();
         });
       });
-      
-      console.log(`API: Player ${userId} marked as offline in room ${roomId}`);
       
       // แจ้งผู้เล่นอื่นๆ ผ่าน socket.io
       const io = req.app.get('io');
@@ -116,7 +105,6 @@ app.post('/api/player-leave', express.json(), async (req, res) => {
       }
     }
     
-    console.log('API: Player leave request completed successfully');
     res.json({ success: true });
     
   } catch (error) {
@@ -150,7 +138,6 @@ app.get('/api/room-players/:roomId', async (req, res) => {
       });
     });
     
-    console.log('API: Online players found:', players);
     res.json(players);
     
   } catch (error) {

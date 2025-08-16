@@ -10,6 +10,44 @@ let playerIngredients = window.initialPlayerIngredients || [];
 // ตรวจสอบว่าเกมจบแล้วหรือไม่
 const isGameFinished = window.isGameFinished || false;
 
+// ถ้าเกมจบแล้ว ให้ดึงข้อมูลผู้ชนะทันที
+if (isGameFinished) {
+  console.log('เกมจบแล้ว - ดึงข้อมูลผู้ชนะ');
+  
+  // แสดงส่วนผู้ชนะทันที
+  const gameOverBanner = document.getElementById('game-over-banner');
+  const gameOverBannerHidden = document.getElementById('game-over-banner-hidden');
+  
+  if (gameOverBanner) {
+    gameOverBanner.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะเมื่อโหลดหน้า');
+  } else if (gameOverBannerHidden) {
+    gameOverBannerHidden.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะที่ซ่อนอยู่เมื่อโหลดหน้า');
+  }
+  
+  // ซ่อนส่วนเกม
+  const gameArea = document.getElementById('game-area');
+  if (gameArea) {
+    gameArea.style.display = 'none';
+    console.log('ซ่อนส่วนเกมเมื่อโหลดหน้า');
+  }
+  
+  // ซ่อนปุ่มเกมต่างๆ
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const resetBtn = document.getElementById('reset-game-btn');
+  
+  if (startBtn) startBtn.classList.add('hidden');
+  if (nextBtn) nextBtn.classList.add('hidden');
+  if (resetBtn) resetBtn.classList.add('hidden');
+  
+  console.log('ซ่อนปุ่มเกมเมื่อโหลดหน้า');
+  
+  // ดึงข้อมูลผู้ชนะทันที
+  socket.emit('get_game_winner', { roomId: window.roomId });
+}
+
 // สำหรับวัตถุดิบและอาหาร
 let myPoints = window.initialPlayerScore || 0;
 let myIngredients = window.initialPlayerIngredients || [];
@@ -382,7 +420,21 @@ function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
   console.log(`อัปเดตการแสดงผู้ชนะ: ${winnerName} ในห้อง ${roomName}`);
   console.log(`เมนูที่ผู้ชนะได้รับ:`, winnerFoods);
   
-  // อัปเดตข้อความผู้ชนะในหน้า (ลองหลาย selector)
+  // อัปเดตข้อความผู้ชนะในหน้าโดยตรงผ่าน ID
+  const winnerNameElement = document.getElementById('winner-name');
+  const winnerNameHiddenElement = document.getElementById('winner-name-hidden');
+  
+  if (winnerNameElement) {
+    winnerNameElement.textContent = winnerName;
+    console.log(`อัปเดตผู้ชนะใน winner-name element: ${winnerName}`);
+  }
+  
+  if (winnerNameHiddenElement) {
+    winnerNameHiddenElement.textContent = winnerName;
+    console.log(`อัปเดตผู้ชนะใน winner-name-hidden element: ${winnerName}`);
+  }
+  
+  // อัปเดตข้อความผู้ชนะในหน้า (fallback สำหรับ selector อื่นๆ)
   const winnerElements = [
     document.querySelector('.text-yellow-600'),
     document.querySelector('.text-yellow-200'),
@@ -391,7 +443,8 @@ function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
   ];
   
   winnerElements.forEach(element => {
-    if (element) { 
+    if (element && element.textContent === 'รอข้อมูล...') { 
+      element.textContent = winnerName;
       console.log(`อัปเดตผู้ชนะใน element: ${winnerName}`);
     }
   });
@@ -405,8 +458,26 @@ function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
     }
   });
   
+  // แสดงส่วนผู้ชนะทันที
+  const gameOverBanner = document.getElementById('game-over-banner');
+  const gameOverBannerHidden = document.getElementById('game-over-banner-hidden');
+  
+  if (gameOverBanner) {
+    gameOverBanner.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะแล้ว');
+  } else if (gameOverBannerHidden) {
+    gameOverBannerHidden.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะที่ซ่อนอยู่แล้ว');
+  }
+  
+  // ซ่อนส่วนเกม
+  const gameArea = document.getElementById('game-area');
+  if (gameArea) {
+    gameArea.style.display = 'none';
+    console.log('ซ่อนส่วนเกมแล้ว');
+  }
+  
   // อัปเดตสถานะห้องในหน้า
-  const gameOverBanner = document.querySelector('.bg-gradient-to-br.from-green-400');
   if (gameOverBanner) {
     gameOverBanner.style.display = 'block';
   }
@@ -414,8 +485,10 @@ function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
   // แสดงเมนูใน Game Over banner
   const winnerFoodsDisplay = document.getElementById('winner-foods-display');
   const winnerFoodsList = document.getElementById('winner-foods-list');
+  const winnerFoodsDisplayHidden = document.getElementById('winner-foods-display-hidden');
+  const winnerFoodsListHidden = document.getElementById('winner-foods-list-hidden');
   
-  if (winnerFoodsDisplay && winnerFoodsList && winnerFoods && winnerFoods.length > 0) {
+  if (winnerFoods && winnerFoods.length > 0) {
     // สร้าง HTML สำหรับเมนู
     const foodsHTML = winnerFoods.map(food => `
       <span class="inline-flex items-center bg-yellow-100 text-yellow-800 rounded-full px-3 py-1 text-sm font-semibold">
@@ -424,9 +497,19 @@ function updateWinnerDisplay(winnerName, roomName, winnerFoods = []) {
       </span>
     `).join('');
     
-    winnerFoodsList.innerHTML = foodsHTML;
-    winnerFoodsDisplay.style.display = 'block';
-    console.log(`แสดงเมนูใน Game Over banner: ${winnerFoods.join(', ')}`);
+    // อัปเดตส่วนที่แสดง
+    if (winnerFoodsDisplay && winnerFoodsList) {
+      winnerFoodsList.innerHTML = foodsHTML;
+      winnerFoodsDisplay.style.display = 'block';
+      console.log(`แสดงเมนูใน Game Over banner: ${winnerFoods.join(', ')}`);
+    }
+    
+    // อัปเดตส่วนที่ซ่อนอยู่
+    if (winnerFoodsDisplayHidden && winnerFoodsListHidden) {
+      winnerFoodsListHidden.innerHTML = foodsHTML;
+      winnerFoodsDisplayHidden.style.display = 'block';
+      console.log(`แสดงเมนูใน Game Over banner ที่ซ่อนอยู่: ${winnerFoods.join(', ')}`);
+    }
   }
   
   // ซ่อนปุ่มเกม
@@ -503,8 +586,45 @@ socket.on('game_ended', ({ winner, roomId, roomName }) => {
   gameFinished = true;
   isGameFinished = true;
   
+  // แสดงส่วนผู้ชนะทันที
+  const gameOverBanner = document.getElementById('game-over-banner');
+  const gameOverBannerHidden = document.getElementById('game-over-banner-hidden');
+  
+  if (gameOverBanner) {
+    gameOverBanner.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะเมื่อเกมจบ');
+  } else if (gameOverBannerHidden) {
+    gameOverBannerHidden.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะที่ซ่อนอยู่เมื่อเกมจบ');
+    
+    // เพิ่ม event listener สำหรับปุ่มออกจากห้องในส่วนที่ซ่อนอยู่
+    const leaveBtnHidden = document.getElementById('leave-room-btn-finished-hidden');
+    if (leaveBtnHidden) {
+      leaveBtnHidden.addEventListener('click', function() {
+        window.location.href = '/quiz';
+      });
+    }
+  }
+  
+  // ซ่อนส่วนเกม
+  const gameArea = document.getElementById('game-area');
+  if (gameArea) {
+    gameArea.style.display = 'none';
+  }
+  
   // อัปเดต UI ทันที - แสดงผู้ชนะในหน้าเว็บ
   updateWinnerDisplay(winner.name, roomName, winner.foods);
+  
+  // ซ่อนปุ่มเกมต่างๆ
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const resetBtn = document.getElementById('reset-game-btn');
+  
+  if (startBtn) startBtn.classList.add('hidden');
+  if (nextBtn) nextBtn.classList.add('hidden');
+  if (resetBtn) resetBtn.classList.add('hidden');
+  
+  console.log('ซ่อนปุ่มเกมเมื่อเกมจบ');
   
   // หยุดการเรียกข้อมูลซ้ำ
   if (window.checkWinnerInterval) {
@@ -573,19 +693,55 @@ socket.on('game_ended', ({ winner, roomId, roomName }) => {
   
   // ปิดปุ่มต่างๆ ในเกม
   disableGameControls();
+  
+  // แสดง notification ว่าผู้ชนะคือใคร
+  showNotification(`🏆 ผู้ชนะ: ${winner.name}`, 'success');
 });
 
 // รับข้อมูลผู้ชนะสำหรับห้องที่จบแล้ว
 socket.on('game_winner_info', ({ winner, roomName }) => {
   console.log(`ข้อมูลผู้ชนะ: ${winner.name}`);
   
-  // อัปเดตการแสดงผู้ชนะในหน้าเว็บ
+  // อัปเดตการแสดงผู้ชนะในหน้าเว็บทันที
   updateWinnerDisplay(winner.name, roomName, winner.foods);
+  
+  // แสดงส่วนผู้ชนะทันที
+  const gameOverBanner = document.getElementById('game-over-banner');
+  const gameOverBannerHidden = document.getElementById('game-over-banner-hidden');
+  
+  if (gameOverBanner) {
+    gameOverBanner.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะเมื่อได้รับข้อมูล');
+  } else if (gameOverBannerHidden) {
+    gameOverBannerHidden.style.display = 'block';
+    console.log('แสดงส่วนผู้ชนะที่ซ่อนอยู่เมื่อได้รับข้อมูล');
+  }
+  
+  // ซ่อนส่วนเกม
+  const gameArea = document.getElementById('game-area');
+  if (gameArea) {
+    gameArea.style.display = 'none';
+    console.log('ซ่อนส่วนเกมเมื่อได้รับข้อมูล');
+  }
+  
+  // ซ่อนปุ่มเกมต่างๆ
+  const startBtn = document.getElementById('start-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const resetBtn = document.getElementById('reset-game-btn');
+  
+  if (startBtn) startBtn.classList.add('hidden');
+  if (nextBtn) nextBtn.classList.add('hidden');
+  if (resetBtn) resetBtn.classList.add('hidden');
+  
+  console.log('ซ่อนปุ่มเกมเมื่อได้รับข้อมูลผู้ชนะ');
   
   // หยุดการเรียกข้อมูลซ้ำ
   if (window.checkWinnerInterval) {
     clearInterval(window.checkWinnerInterval);
   }
+  
+  // แสดง notification ว่าผู้ชนะคือใคร
+  showNotification(`🏆 ผู้ชนะ: ${winner.name}`, 'success');
 });
 
 
@@ -3155,12 +3311,8 @@ document.addEventListener('DOMContentLoaded', function () {
           // ถ้าเกมจบแล้ว ให้แสดงสรุป
           showSummary();
         }
-      } else {
-        console.log('Questions not loaded yet, waiting for socket event');
-      }
-    } else {
-      console.log('Game is finished, current question:', currentQuestion);
-    }
+      } 
+    } 
   }
 
   // อัปเดตคะแนนเริ่มต้นใน UI ในทุกที่ที่แสดง

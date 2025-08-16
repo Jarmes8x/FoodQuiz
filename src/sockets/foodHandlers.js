@@ -63,7 +63,6 @@ const assignRandomFoodsToPlayer = async (roomId, userId) => {
   try {
     const existingFoods = await getPlayerFoods(roomId, userId);
     if (existingFoods.length > 0) {
-      console.log(`Existing foods found for user ${userId} in room ${roomId}:`, existingFoods);
       return existingFoods;
     }
     const randomFoods = generateRandomFoods();
@@ -84,7 +83,6 @@ const setupFoodHandlers = (io, socket) => {
       const foods = await assignRandomFoodsToPlayer(roomId, user.id);
       socket.join(roomId);
       socket.emit('foods_assigned', { roomId, userId: user.id, foods });
-      console.log(`Assigned foods to user ${user.name} in room ${roomId}:`, foods);
 
     } catch (error) {
       console.error('Error in join_room:', error);
@@ -237,7 +235,6 @@ const setupFoodHandlers = (io, socket) => {
   // เพิ่ม event handler สำหรับดึงข้อมูลผู้ชนะ
   socket.on('get_game_winner', async ({ roomId }) => {
     try {
-      console.log(`กำลังดึงข้อมูลผู้ชนะสำหรับห้อง ${roomId}`);
       
       // ตรวจสอบสถานะห้องก่อน
       const roomStatus = await executeWithRetry(async () => {
@@ -282,9 +279,6 @@ const setupFoodHandlers = (io, socket) => {
         });
       });
 
-      console.log('ข้อมูลผู้ชนะที่ได้:', winnerData);
-      console.log('ข้อมูลห้องที่ได้:', roomData);
-
       if (winnerData && roomData) {
         // ดึงเมนูที่ผู้ชนะได้รับ
         const winnerFoods = await executeWithRetry(async () => {
@@ -306,10 +300,8 @@ const setupFoodHandlers = (io, socket) => {
           roomName: roomData.name
         };
         
-        console.log('ส่งข้อมูลผู้ชนะ:', winnerInfo);
         socket.emit('game_winner_info', winnerInfo);
       } else {
-        console.log('ไม่พบข้อมูลผู้ชนะหรือข้อมูลห้อง');
         // ส่งข้อมูลเริ่มต้นถ้าไม่พบ
         socket.emit('game_winner_info', {
           winner: {
@@ -320,7 +312,6 @@ const setupFoodHandlers = (io, socket) => {
         });
       }
     } catch (error) {
-      console.error('Error getting game winner:', error);
       socket.emit('error', { message: 'Error retrieving winner info' });
     }
   });
