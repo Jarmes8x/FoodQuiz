@@ -88,8 +88,23 @@ socket.on('room_deleted', function (data) {
 
 // เมื่อห้องเต็ม
 socket.on('room_full', function (data) {
+  showNotification('ห้องนี้เต็ม', 'info');
   window.location.href = '/quiz';
 });
+
+// เมื่อห้องกำลังเล่นอยู่ (process)
+socket.on('room_in_process', function (data) {
+  showNotification('ไม่สามารถเข้าห้องได้ ขณะนี้เกมกำลังดำเนินการอยู่', 'warning');
+  window.location.href = '/quiz';
+});
+
+// เมื่อห้องจบเกมแล้ว (finished)
+socket.on('room_finished', function (data) {
+  showNotification('ไม่สามารถเข้าห้องได้ เกมนี้จบแล้ว', 'warning');
+  window.location.href = '/quiz';
+});
+
+
 
 // จัดการ error จากเกม
 socket.on('game_error', function (data) {
@@ -2196,11 +2211,6 @@ let gameStartHandled = false;
 // Join room
 console.log('Joining room:', { roomId: window.roomId, user: window.user });
 socket.emit('join_room', window.roomId, window.user);
-
-
-
-
-
 
 
 // จัดการเมื่อผู้ใช้ออกจากหน้าเว็บ

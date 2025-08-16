@@ -46,6 +46,7 @@
   <div class="container mx-auto px-4 py-8">
     <h2 class="text-2xl font-bold mb-4 text-center">ห้อง: <%= room.name %></h2>
     
+    
     <% if (typeof isGameFinished !== 'undefined' && isGameFinished) { %>
     <!-- แสดงผู้ชนะเมื่อเกมจบแล้ว -->
     <div id="game-over-banner" class="bg-gradient-to-br from-green-400 via-green-500 to-green-600 rounded-3xl p-8 mb-6 text-center shadow-2xl border-4 border-green-300 relative overflow-hidden" style="display: block;">

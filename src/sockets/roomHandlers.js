@@ -386,51 +386,63 @@ const setupRoomHandlers = (io, socket) => {
     }
   });
 
-  // เมื่อเริ่มเกม (หลังจากเลือกคำถามแล้ว)
-  socket.on('start_game', async (roomId, ownerId) => {
-    try {
-      // ตรวจสอบว่าเป็นเจ้าของห้องหรือไม่
-      const room = await executeWithRetry(async () => {
-        return new Promise((resolve, reject) => {
-          usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          });
+
+// เมื่อเริ่มเกม (หลังจากเลือกคำถามแล้ว)
+socket.on('start_game', async (roomId, ownerId) => {
+  try {
+    // ตรวจสอบว่าเป็นเจ้าของห้องหรือไม่
+    const room = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.get('SELECT creator_id FROM rooms WHERE id = ?', [roomId], (err, row) => {
+          if (err) reject(err);
+          else resolve(row);
         });
       });
+    });
 
-      if (!room || room.creator_id !== ownerId) {
-        socket.emit('game_error', { message: 'ไม่มีสิทธิ์เริ่มเกม' });
-        return;
-      }
-
-      // บันทึกสถานะเกมเริ่มต้นสำหรับทุกคนในห้อง
-      const players = await executeWithRetry(async () => {
-        return new Promise((resolve, reject) => {
-          usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [roomId], (err, rows) => {
-            if (err) reject(err);
-            else resolve(rows || []);
-          });
-        });
-      });
-
-      for (const player of players) {
-        await saveGameState(roomId, player.user_id, {
-          currentQuestion: 0,
-          answeredQuestions: [],
-          gameStarted: true,
-          gameFinished: false
-        });
-      }
-
-      // แจ้งทุกคนในห้องว่าเกมเริ่มแล้ว
-      io.to(`room_${roomId}`).emit('game_started');
-
-    } catch (error) {
-      console.error('Error in start_game:', error);
-      io.to(`room_${roomId}`).emit('game_error', { message: 'เกิดข้อผิดพลาดในการเริ่มเกม' });
+    if (!room || room.creator_id !== ownerId) {
+      socket.emit('game_error', { message: 'ไม่มีสิทธิ์เริ่มเกม' });
+      return;
     }
-  });
+
+    // อัปเดตสถานะห้องเป็น process
+    await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.run('UPDATE rooms SET status = "process" WHERE id = ?', [roomId], (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+    });
+""
+    // บันทึกสถานะเกมเริ่มต้นสำหรับทุกคนในห้อง
+    const players = await executeWithRetry(async () => {
+      return new Promise((resolve, reject) => {
+        usersDB.all('SELECT user_id FROM room_players WHERE room_id = ?', [roomId], (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        });
+      });
+    });
+
+    for (const player of players) {
+      await saveGameState(roomId, player.user_id, {
+        currentQuestion: 0,
+        answeredQuestions: [],
+        gameStarted: true,
+        gameFinished: false
+      });
+    }
+
+    // แจ้งทุกคนในห้องว่าเกมเริ่มแล้ว
+    io.to(`room_${roomId}`).emit('game_started');
+
+  } catch (error) {
+    console.error('Error in start_game:', error);
+    io.to(`room_${roomId}`).emit('game_error', { message: 'เกิดข้อผิดพลาดในการเริ่มเกม' });
+  }
+});
+
 
   // เมื่อเลือกคำถาม
   socket.on('questions_selected', async (roomId, selectedQuestionIds) => {
