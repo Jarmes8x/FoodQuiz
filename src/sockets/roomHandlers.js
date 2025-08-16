@@ -949,12 +949,7 @@ const autoResetGame = async (io, roomId) => {
     });
 
     // ไม่รีเซ็ตคะแนนของผู้เล่น (เก็บคะแนนไว้)
-    console.log('Keeping player scores unchanged');
-
     // ไม่ลบข้อมูลอาหารที่ทำแล้วและวัตถุดิบของผู้เล่น (เก็บไว้)
-    console.log('Keeping cooked meals and player ingredients/foods unchanged');
-
-    console.log(`Auto reset completed for room ${roomId} (questions and game state only)`);
 
     // แจ้งทุกคนในห้องว่าเกมจบแล้ว
     io.to(`room_${roomId}`).emit('game_auto_reset', {

@@ -433,10 +433,8 @@ const endGameWithWinner = async (roomId, winnerUserId, io) => {
         });
       });
     });
-    console.log(`📊 จำนวนคำถามในห้อง ${roomId} ก่อนลบ: ${questionsBeforeDelete} ข้อ`);
     
     // ลบคำถามออกจากตาราง room_questions
-    console.log(`🗑️ กำลังลบคำถามจาก room_questions สำหรับห้อง ${roomId}...`);
     await executeWithRetry(async () => {
       return new Promise((resolve, reject) => {
         usersDB.run('DELETE FROM room_questions WHERE room_id = ?', [roomId], (err) => {
@@ -444,7 +442,6 @@ const endGameWithWinner = async (roomId, winnerUserId, io) => {
             console.error('❌ Error deleting room questions:', err);
             reject(err);
           } else {
-            console.log(`✅ ลบคำถามจาก room_questions สำเร็จสำหรับห้อง ${roomId}`);
             resolve();
           }
         });
@@ -464,8 +461,6 @@ const endGameWithWinner = async (roomId, winnerUserId, io) => {
     
     if (questionsAfterDelete > 0) {
       console.warn(`⚠️ คำถามยังไม่หายไปทั้งหมด! ยังเหลือ ${questionsAfterDelete} ข้อ`);
-    } else {
-      console.log(`🎉 ลบคำถามสำเร็จ! ไม่เหลือคำถามในห้อง ${roomId}`);
     }
 
     // ดึงเมนูที่ผู้ชนะได้รับ

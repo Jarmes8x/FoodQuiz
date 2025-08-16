@@ -27,26 +27,26 @@
   </div>
 </div>
 
-  <!-- Available Rooms Section -->
-  <div class="container mx-auto px-4">
-    <% if (error) { %>
-      <div class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium">
-        <%= error %>
-      </div>
-    <% } %>
-    
-    <!-- Room Full Message -->
-    <div id="room-full-message" class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium" style="display: none;">
-      <i class="fa-solid fa-exclamation-triangle mr-2"></i>
-      ห้องที่คุณพยายามเข้าร่วมเต็มแล้ว กรุณารอให้มีคนออกจากห้องก่อน
+<!-- Available Rooms Section -->
+<div class="container mx-auto px-4">
+  <% if (error) { %>
+    <div class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium">
+      <%= error %>
     </div>
+  <% } %>
   
+  <!-- Room Full Message -->
+  <div id="room-full-message" class="bg-red-50 border border-red-200 text-red-800 px-6 py-4 rounded-2xl mb-8 w-full text-center font-medium" style="display: none;">
+    <i class="fa-solid fa-exclamation-triangle mr-2"></i>
+    ห้องที่คุณพยายามเข้าร่วมเต็มแล้ว กรุณารอให้มีคนออกจากห้องก่อน
+  </div>
+
   <div class="grid md:grid-cols-2 lg:grid-cols-2 gap-8">
     <% if (rooms && rooms.length > 0) { %>
       <% rooms.forEach(function(room) { %>
         <div class="group bg-white rounded-3xl shadow-lg hover:shadow-2xl border-2 transition-all duration-500 overflow-hidden <%= room.owner_name == user.name ? 'border-amber-400' : 'border-gray-100 hover:border-blue-200' %>">
           <!-- Header with room color -->
-          <div class="p-6 relative" style="background: <%- room.room_color %>;">
+          <div class="p-6 relative" style="background-color: <%= room.room_color %>;">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-3">
                 <div class="w-3 h-3 rounded-full border-2 border-white shadow bg-black"></div>
@@ -110,7 +110,11 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
-  // ฟังก์ชันสำหรับเข้าร่วมห้อง
+  // ตัวแปรสำหรับเก็บข้อมูล
+  const socket = io();
+  const fetchControllers = {};
+
+  // ฟังก์ชันหลักสำหรับเข้าร่วมห้อง
   function joinRoom(roomId, ownerName, userName) {
     // ถ้าเป็นเจ้าของห้อง ให้เข้าร่วมได้เลย
     if (ownerName === userName) {
@@ -118,34 +122,72 @@
       return;
     }
 
-    // ตรวจสอบจำนวนผู้เล่นก่อนเข้าร่วม
-    const playerCountEl = document.querySelector(`[data-room-id="${roomId}"]`);
-    const maxPlayers = parseInt(playerCountEl.dataset.maxPlayers);
-    const currentCount = parseInt(playerCountEl.textContent);
-
-    if (currentCount >= maxPlayers) {
-      // แสดงข้อความแจ้งเตือนที่หน้า quiz แทน
-      showRoomFullMessage();
-      return;
-    }
-
-    // ถ้าจำนวนผู้เล่นยังไม่เต็ม ให้เข้าร่วมได้
-    window.location.href = `/game-room/${roomId}`;
+    // ตรวจสอบสถานะห้องก่อนเข้าร่วม
+    checkRoomStatus(roomId);
   }
 
-  // ฟังก์ชันแสดงข้อความห้องเต็ม
-  function showRoomFullMessage() {
-    // สร้าง element สำหรับแสดงข้อความ
+  // ฟังก์ชันตรวจสอบสถานะห้อง
+  async function checkRoomStatus(roomId) {
+    try {
+      const response = await fetch(`/api/room-status/${roomId}`);
+      const roomData = await response.json();
+      
+      if (roomData.status === 'process') {
+        showMessage('ห้องกำลังเล่นอยู่!', 'กรุณารอให้เกมจบก่อนเข้าร่วม', 'orange');
+        return;
+      }
+      
+      // ตรวจสอบจำนวนผู้เล่น
+      const playerCountEl = document.querySelector(`[data-room-id="${roomId}"]`);
+      const maxPlayers = parseInt(playerCountEl.dataset.maxPlayers);
+      const currentCount = parseInt(playerCountEl.textContent);
+
+      if (currentCount >= maxPlayers) {
+        showMessage('ห้องเต็มแล้ว!', 'กรุณารอให้มีคนออกจากห้องก่อน', 'red');
+        return;
+      }
+
+      // เข้าร่วมห้องได้
+      window.location.href = `/game-room/${roomId}`;
+      
+    } catch (error) {
+      console.error('Error checking room status:', error);
+      // ถ้าไม่สามารถตรวจสอบได้ ให้ใช้การตรวจสอบแบบเดิม
+      const playerCountEl = document.querySelector(`[data-room-id="${roomId}"]`);
+      const maxPlayers = parseInt(playerCountEl.dataset.maxPlayers);
+      const currentCount = parseInt(playerCountEl.textContent);
+
+      if (currentCount >= maxPlayers) {
+        showMessage('ห้องเต็มแล้ว!', 'กรุณารอให้มีคนออกจากห้องก่อน', 'red');
+        return;
+      }
+
+      window.location.href = `/game-room/${roomId}`;
+    }
+  }
+
+  // ฟังก์ชันแสดงข้อความแจ้งเตือน
+  function showMessage(title, message, type) {
+    const colors = {
+      red: 'bg-red-100 border-red-400 text-red-700',
+      orange: 'bg-orange-100 border-orange-400 text-orange-700'
+    };
+    
+    const icons = {
+      red: 'fa-exclamation-triangle',
+      orange: 'fa-gamepad'
+    };
+
     const messageDiv = document.createElement('div');
-    messageDiv.className = 'fixed top-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm';
+    messageDiv.className = `fixed top-4 right-4 border px-4 py-3 rounded-lg shadow-lg z-50 max-w-sm ${colors[type]}`;
     messageDiv.innerHTML = `
       <div class="flex items-center gap-2">
-        <i class="fa-solid fa-exclamation-triangle text-red-500"></i>
+        <i class="fa-solid ${icons[type]}"></i>
         <div>
-          <div class="font-bold">ห้องเต็มแล้ว!</div>
-          <div class="text-sm">กรุณารอให้มีคนออกจากห้องก่อน</div>
+          <div class="font-bold">${title}</div>
+          <div class="text-sm">${message}</div>
         </div>
-        <button onclick="this.parentElement.parentElement.remove()" class="ml-auto text-red-500 hover:text-red-700">
+        <button onclick="this.parentElement.parentElement.remove()" class="ml-auto">
           <i class="fa-solid fa-times"></i>
         </button>
       </div>
@@ -161,6 +203,115 @@
     }, 5000);
   }
 
+  // ฟังก์ชันอัปเดตจำนวนผู้เล่น
+  async function updatePlayerCount(roomId, element, maxPlayers) {
+    try {
+      // ยกเลิก request เดิมถ้ายังไม่เสร็จ
+      if (fetchControllers[roomId]) {
+        fetchControllers[roomId].abort();
+      }
+
+      const controller = new AbortController();
+      fetchControllers[roomId] = controller;
+
+      const response = await fetch(`/api/room-players/${roomId}`, { signal: controller.signal });
+      const players = await response.json();
+      
+      element.textContent = players.length;
+      updateRoomStatus(roomId, players.length, maxPlayers);
+      
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        console.error(`Error fetching players for room ${roomId}:`, error);
+      }
+    }
+  }
+
+  // ฟังก์ชันอัปเดตสถานะห้อง
+  async function updateRoomStatus(roomId, currentCount, maxCount) {
+    const statusEl = document.querySelector(`.room-status[data-room-id="${roomId}"]`);
+    const joinBtn = document.getElementById(`join-btn-${roomId}`);
+    
+    try {
+      const response = await fetch(`/api/room-status/${roomId}`);
+      const roomData = await response.json();
+      const roomStatus = roomData.status;
+      
+      updateRoomUI(statusEl, joinBtn, roomStatus, currentCount, maxCount);
+      
+    } catch (error) {
+      console.error(`Error fetching room status for room ${roomId}:`, error);
+      // ถ้าไม่สามารถดึงสถานะได้ ให้ใช้การตรวจสอบแบบเดิม
+      updateRoomUI(statusEl, joinBtn, 'waiting', currentCount, maxCount);
+    }
+  }
+
+  // ฟังก์ชันอัปเดต UI ของห้อง
+  function updateRoomUI(statusEl, joinBtn, roomStatus, currentCount, maxCount) {
+    if (roomStatus === 'process') {
+      // ห้องกำลังเล่นอยู่
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div class="flex items-center gap-2 text-orange-600 text-sm font-medium">
+            <i class="fa-solid fa-gamepad"></i>
+            <span>กำลังเล่นอยู่</span>
+          </div>
+        `;
+      }
+      
+      if (joinBtn && !joinBtn.classList.contains('owner-room')) {
+        disableJoinButton(joinBtn, 'ห้องเริ่มเกมไปแล้ว', 'fa-play');
+      }
+      
+    } else if (currentCount >= maxCount) {
+      // ห้องเต็ม
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div class="flex items-center gap-2 text-red-600 text-sm font-medium">
+            <i class="fa-solid fa-exclamation-triangle"></i>
+            <span>ห้องเต็มแล้ว</span>
+          </div>
+        `;
+      }
+      
+      if (joinBtn && !joinBtn.classList.contains('owner-room')) {
+        disableJoinButton(joinBtn, 'ห้องเต็ม', 'fa-lock');
+      }
+      
+    } else {
+      // ห้องยังไม่เต็มและไม่กำลังเล่น
+      if (statusEl) {
+        statusEl.innerHTML = `
+          <div class="flex items-center gap-2 text-green-600 text-sm font-medium">
+            <i class="fa-solid fa-check-circle"></i>
+            <span>พร้อมเข้าร่วม</span>
+          </div>
+        `;
+      }
+      
+      if (joinBtn) {
+        enableJoinButton(joinBtn);
+      }
+    }
+  }
+
+  // ฟังก์ชันปิดการใช้งานปุ่มเข้าร่วม
+  function disableJoinButton(button, text, icon) {
+    button.disabled = true;
+    button.classList.add('opacity-50', 'cursor-not-allowed');
+    button.classList.remove('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
+    button.innerHTML = `<i class="fa-solid ${icon} mr-2"></i>${text}`;
+  }
+
+  // ฟังก์ชันเปิดการใช้งานปุ่มเข้าร่วม
+  function enableJoinButton(button) {
+    button.disabled = false;
+    button.classList.remove('opacity-50', 'cursor-not-allowed');
+    button.classList.add('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
+    button.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> เข้าร่วมเกม';
+  }
+
+  // เมื่อหน้าเว็บโหลดเสร็จ
   document.addEventListener('DOMContentLoaded', () => {
     // ตรวจสอบ URL parameter สำหรับข้อความห้องเต็ม
     const urlParams = new URLSearchParams(window.location.search);
@@ -173,122 +324,56 @@
       }
     }
 
+    // เริ่มต้นการอัปเดตข้อมูลห้อง
+    initializeRoomUpdates();
+  });
+
+  // ฟังก์ชันเริ่มต้นการอัปเดตข้อมูลห้อง
+  function initializeRoomUpdates() {
     const playerCountElements = document.querySelectorAll('.player-count');
-    const fetchControllers = {};
 
     playerCountElements.forEach(el => {
       const roomId = el.dataset.roomId;
       const maxPlayers = parseInt(el.dataset.maxPlayers);
-      let lastCount = null; // จำค่าล่าสุดเพื่อเช็คว่ามีการเปลี่ยนหรือไม่
 
-      const updatePlayerCount = () => {
-        // ยกเลิก request เดิมถ้ายังไม่เสร็จ
-        if (fetchControllers[roomId]) {
-          fetchControllers[roomId].abort();
-        }
-
-        const controller = new AbortController();
-        fetchControllers[roomId] = controller;
-
-        fetch(`/api/room-players/${roomId}`, { signal: controller.signal })
-          .then(res => res.json())
-          .then(players => {
-            if (players.length !== lastCount) {
-              el.textContent = players.length;
-              lastCount = players.length;
-
-              // อัปเดตสถานะห้อง
-              updateRoomStatus(roomId, players.length, maxPlayers);
-            }
-          })
-          .catch(err => { 
-            if (err.name !== 'AbortError') {
-              console.error(`Error fetching players for room ${roomId}:`, err);
-            }
-          });
-      };
-
-      // ฟังก์ชันอัปเดตสถานะห้อง
-      const updateRoomStatus = (roomId, currentCount, maxCount) => {
-        const statusEl = document.querySelector(`.room-status[data-room-id="${roomId}"]`);
-        const joinBtn = document.getElementById(`join-btn-${roomId}`);
-        
-        if (currentCount >= maxCount) {
-          // ห้องเต็ม
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div class="flex items-center gap-2 text-red-600 text-sm font-medium">
-                <i class="fa-solid fa-exclamation-triangle"></i>
-                <span>ห้องเต็มแล้ว</span>
-              </div>
-            `;
-          }
-          
-          if (joinBtn && !joinBtn.classList.contains('owner-room')) {
-            joinBtn.disabled = true;
-            joinBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            joinBtn.classList.remove('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
-            joinBtn.innerHTML = '<i class="fa-solid fa-lock mr-2"></i>ห้องเต็ม';
-          }
-        } else {
-          // ห้องยังไม่เต็ม
-          if (statusEl) {
-            statusEl.innerHTML = `
-              <div class="flex items-center gap-2 text-green-600 text-sm font-medium">
-                <i class="fa-solid fa-check-circle"></i>
-                <span>พร้อมเข้าร่วม</span>
-              </div>
-            `;
-          }
-          
-          if (joinBtn) {
-            joinBtn.disabled = false;
-            joinBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-            joinBtn.classList.add('hover:from-[#ff4d4d]', 'hover:to-[#ff6a00]', 'hover:bg-purple-700');
-            joinBtn.innerHTML = '<i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> เข้าร่วมเกม';
-          }
-        }
-      };
-
-      // โหลดตอนเริ่ม
-      updatePlayerCount();
+      // โหลดข้อมูลครั้งแรก
+      updatePlayerCount(roomId, el, maxPlayers);
 
       // อัปเดตทุก 5 วินาที
-      setInterval(updatePlayerCount, 5000);
+      setInterval(() => {
+        updatePlayerCount(roomId, el, maxPlayers);
+      }, 5000);
     });
+  }
+
+  // ฟังก์ชันสำหรับเจ้าของห้องเริ่มเกม
+  function startGame(roomId, ownerId) {
+    socket.emit('start_game', roomId, ownerId);
+  }
+
+  // รับ event select_questions (เฉพาะเจ้าของห้อง)
+  socket.on('select_questions', function(questions) {
+    showQuestionSelectionModal(questions);
   });
-</script>
 
-<script>
-  // สมมติว่ามีการเชื่อมต่อ socket.io แล้ว
-const socket = io();
+  // ฟังก์ชันแสดง modal เลือกคำถาม
+  function showQuestionSelectionModal(questions) {
+    let html = '<div class="modal"><h3>เลือกคำถามสำหรับเกมนี้</h3><ul>';
+    questions.forEach((q, idx) => {
+      html += `<li>${idx + 1}. ${q.question_text}</li>`;
+    });
+    html += '</ul><button onclick="confirmQuestions()">ยืนยัน</button></div>';
+    document.body.insertAdjacentHTML('beforeend', html);
+  }
 
-// เมื่อเจ้าของห้องกดเริ่มเกม
-function startGame(roomId, ownerId) {
-  socket.emit('start_game', roomId, ownerId);
-}
-
-// รับ event select_questions (เฉพาะเจ้าของห้อง)
-socket.on('select_questions', function(questions) {
-  // แสดง UI ให้เจ้าของห้องเลือกคำถาม
-  // ตัวอย่าง: แสดง modal หรือ list คำถาม
-  showQuestionSelectionModal(questions);
-});
-
-function showQuestionSelectionModal(questions) {
-  // ตัวอย่าง: สร้าง modal หรือ popup
-  let html = '<div class="modal"><h3>เลือกคำถามสำหรับเกมนี้</h3><ul>';
-  questions.forEach((q, idx) => {
-    html += `<li>${idx + 1}. ${q.question_text}</li>`;
-  });
-  html += '</ul><button onclick="confirmQuestions()">ยืนยัน</button></div>';
-  document.body.insertAdjacentHTML('beforeend', html);
-}
-
-function confirmQuestions() {
-  // ส่ง event ไป backend ว่าเลือกคำถามชุดนี้ (หรือเลือก subset ก็ได้)
-  // ตัวอย่าง: socket.emit('questions_selected', questions);
-  // ปิด modal
-  document.querySelector('.modal').remove();
-}
+  // ฟังก์ชันยืนยันการเลือกคำถาม
+  function confirmQuestions() {
+    // ส่ง event ไป backend ว่าเลือกคำถามชุดนี้
+    // socket.emit('questions_selected', questions);
+    // ปิด modal
+    const modal = document.querySelector('.modal');
+    if (modal) {
+      modal.remove();
+    }
+  }
 </script>
