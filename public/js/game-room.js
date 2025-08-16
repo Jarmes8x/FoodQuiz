@@ -25,6 +25,22 @@ let gameState = window.initialGameState || {
 
 console.log('Initial game state from window:', window.initialGameState);
 console.log('Final game state:', gameState);
+console.log('Debug - Initial Player Score from window:', window.initialPlayerScore);
+console.log('Debug - Current Player Score variable:', currentPlayerScore);
+console.log('Debug - My Points variable:', myPoints);
+
+// อัปเดตคะแนนทันทีเมื่อ JavaScript โหลดเสร็จ
+if (window.initialPlayerScore !== undefined && window.initialPlayerScore !== null) {
+  currentPlayerScore = window.initialPlayerScore;
+  myPoints = window.initialPlayerScore;
+  
+  // อัปเดต UI ทันที
+  const myPointsEl = document.getElementById('my-points');
+  if (myPointsEl) {
+    myPointsEl.textContent = window.initialPlayerScore;
+    console.log('Updated my-points element with score:', window.initialPlayerScore);
+  }
+}
 
 // --- Room deleted event ---
 socket.on('room_deleted', function (data) {
@@ -1219,6 +1235,12 @@ function updateMyScore(newScore) {
   if (playerScoreEl) {
     playerScoreEl.textContent = `+${newScore}`;
   }
+  
+  // อัปเดตคะแนนใน score list ด้วย
+  const scoreListEl = document.querySelector(`#score-list #score-${window.user.id}`);
+  if (scoreListEl) {
+    scoreListEl.textContent = newScore;
+  }
 }
 
 function updateMyIngredients(ingredients) {
@@ -1572,6 +1594,12 @@ function updateMyShopUI() {
 
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(window.user.id, myIngredients);
+  
+  // อัปเดตคะแนนใน my-points element โดยตรง (แก้ปัญหาแสดง 0)
+  const myPointsEl = document.getElementById('my-points');
+  if (myPointsEl && myPoints !== undefined && myPoints !== null) {
+    myPointsEl.textContent = myPoints;
+  }
 }
 
 socket.on('update_points_ingredients', data => {
@@ -1630,6 +1658,14 @@ function showFoodModal(food) {
 document.addEventListener('DOMContentLoaded', () => {
   // โหลดรายชื่อผู้เล่นเมื่อหน้าเว็บโหลดเสร็จ
   loadPlayerList();
+  
+  // อัปเดตคะแนนอีกครั้งหลังจากโหลดเสร็จ (แก้ปัญหาแสดง 0)
+  setTimeout(() => {
+    const myPointsEl = document.getElementById('my-points');
+    if (myPointsEl && currentPlayerScore !== undefined && currentPlayerScore !== null) {
+      myPointsEl.textContent = currentPlayerScore;
+    }
+  }, 100);
   
   // ตรวจสอบว่าเกมจบแล้วหรือไม่
   if (isGameFinished) {
@@ -1780,6 +1816,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   updateMyShopUI();
+  
+  // อัปเดตคะแนนครั้งสุดท้ายเพื่อให้แน่ใจ (แก้ปัญหาแสดง 0)
+  setTimeout(() => {
+    const myPointsEl = document.getElementById('my-points');
+    if (myPointsEl && currentPlayerScore !== undefined && currentPlayerScore !== null) {
+      myPointsEl.textContent = currentPlayerScore;
+    }
+  }, 200);
 });
 
 // รับคำสั่งจากเจ้าของห้องให้ไปข้อถัดไป
@@ -3127,6 +3171,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // อัปเดตวัตถุดิบใน player list
   updatePlayerIngredientsInList(window.user.id, myIngredients);
+  
+  // อัปเดตคะแนนใน my-points element ทันที (แก้ปัญหาแสดง 0)
+  const myPointsEl = document.getElementById('my-points');
+  if (myPointsEl && currentPlayerScore !== undefined && currentPlayerScore !== null) {
+    myPointsEl.textContent = currentPlayerScore;
+  }
 
   console.log('Initial player score:', currentPlayerScore);
   console.log('Initial myPoints:', myPoints);

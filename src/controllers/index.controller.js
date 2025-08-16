@@ -360,7 +360,7 @@ exports.gameRoomPage = async (req, res) => {
         `SELECT users.id, users.name, rp.score, rp.is_owner
          FROM room_players rp
          JOIN users ON rp.user_id = users.id
-         WHERE rp.room_id = ? AND rp.is_online = 1`,
+         WHERE rp.room_id = ?`,
         [roomId],
         'Players'
       ),
