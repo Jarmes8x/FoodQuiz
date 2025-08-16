@@ -3201,6 +3201,17 @@ document.addEventListener('DOMContentLoaded', () => {
   
   if (leaveRoomBtn) {
     leaveRoomBtn.addEventListener('click', () => {
+      // ตรวจสอบว่ามีข้อมูลที่จำเป็นครบหรือไม่
+      if (!window.roomId || !window.user || !window.user.id) {
+        console.error('Missing required data for leave_room:', { 
+          roomId: window.roomId, 
+          userId: window.user?.id 
+        });
+        // แม้ไม่มีข้อมูลก็ให้เปลี่ยนหน้าได้
+        window.location.href = '/quiz';
+        return;
+      }
+
       Swal.fire({
         title: 'ยืนยันการออกจากห้อง?',
         text: 'คุณต้องการออกจากห้องนี้และกลับไปยังหน้าหลักหรือไม่?',
@@ -3230,20 +3241,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // จัดการเมื่อผู้เล่นปิดแท็บหรือรีเฟรชหน้า
   window.addEventListener('beforeunload', () => {
-    // แจ้ง server ว่าออกจากห้อง
-    socket.emit('leave_room', {
-      roomId: window.roomId,
-      userId: window.user.id
-    });
-    
-    // ใช้ sendBeacon เป็น backup เพื่อให้แน่ใจว่า event จะถูกส่ง
-    if (navigator.sendBeacon) {
-      const data = JSON.stringify({
+    // ตรวจสอบว่ามีข้อมูลที่จำเป็นครบหรือไม่
+    if (window.roomId && window.user && window.user.id) {
+      // แจ้ง server ว่าออกจากห้อง
+      socket.emit('leave_room', {
         roomId: window.roomId,
-        userId: window.user.id,
-        action: 'leave_room'
+        userId: window.user.id
       });
-      navigator.sendBeacon('/api/player-leave', data);
+      
+      // ใช้ sendBeacon เป็น backup เพื่อให้แน่ใจว่า event จะถูกส่ง
+      if (navigator.sendBeacon) {
+        const data = JSON.stringify({
+          roomId: window.roomId,
+          userId: window.user.id,
+          action: 'leave_room'
+        });
+        
+        // Create a Blob with proper content type
+        const blob = new Blob([data], { type: 'application/json' });
+        const success = navigator.sendBeacon('/api/player-leave', blob);
+        
+        if (!success) {
+          // Fallback to fetch if sendBeacon fails
+          fetch('/api/player-leave', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: data
+          }).catch(err => console.error('Fallback fetch failed:', err));
+        }
+      } else {
+        // Fallback for browsers that don't support sendBeacon
+        const data = JSON.stringify({
+          roomId: window.roomId,
+          userId: window.user.id,
+          action: 'leave_room'
+        });
+        
+        fetch('/api/player-leave', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: data
+        }).catch(err => console.error('Fetch fallback failed:', err));
+      }
+    } else {
+      console.warn('Missing required data for leave_room:', { 
+        roomId: window.roomId, 
+        userId: window.user?.id 
+      });
     }
   });
 
